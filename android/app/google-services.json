@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "909805744262",
+    "project_id": "gigs-court",
+    "storage_bucket": "gigs-court.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:909805744262:android:1db592dcde6c4876b32107",
+        "android_client_info": {
+          "package_name": "com.example.gigs_court"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAetuMTWvRVASK01pyQxMgs5C9mbqdIReo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:909805744262:android:4603379d358bf7d5b32107",
+        "android_client_info": {
+          "package_name": "com.gigscourt.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAetuMTWvRVASK01pyQxMgs5C9mbqdIReo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
