@@ -216,7 +216,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
                   scrollDirection: Axis.horizontal,
                   padding: EdgeInsets.symmetric(horizontal: 24.w),
                   itemCount: _selectedServiceNames.length,
-                  separatorBuilder: (_, __) => SizedBox(width: 8.w),
+                  separatorBuilder: (_, _) => SizedBox(width: 8.w),
                   itemBuilder: (context, index) {
                     final name = _selectedServiceNames.elementAt(index);
                     return Chip(
@@ -251,7 +251,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
                   scrollDirection: Axis.horizontal,
                   padding: EdgeInsets.symmetric(horizontal: 24.w),
                   itemCount: _categories.length,
-                  separatorBuilder: (_, __) => SizedBox(width: 8.w),
+                  separatorBuilder: (_, _) => SizedBox(width: 8.w),
                   itemBuilder: (context, index) {
                     final category = _categories[index];
                     final isSelected = category == _selectedCategory;

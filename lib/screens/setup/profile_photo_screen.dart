@@ -3,11 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:dio/dio.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import '../../config/theme.dart';
-import '../../config/app_config.dart';
 import '../../config/routes.dart';
+import '../../services/imagekit_service.dart';
 
 class ProfilePhotoScreen extends StatefulWidget {
   const ProfilePhotoScreen({super.key});
@@ -20,7 +18,6 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
   File? _selectedImageFile;
   Uint8List? _selectedImageBytes;
   bool _isUploading = false;
-  double _uploadProgress = 0;
   String? _errorMessage;
   final ImagePicker _picker = ImagePicker();
 
@@ -63,95 +60,19 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
     if (!_hasImage) return;
 
     _clearError();
-    setState(() {
-      _isUploading = true;
-      _uploadProgress = 0;
-    });
+    setState(() => _isUploading = true);
 
-    try {
-      // Step 1: Get Firebase Auth token
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('Not authenticated');
-      final idToken = await user.getIdToken();
+    final fileName = 'profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final result = await ImageKitService.uploadImage(_selectedImageFile!, fileName);
 
-      // Step 2: Get auth params from Cloud Function via HTTP
-      final dio = Dio();
-      final authResponse = await dio.get(
-        'https://us-central1-gigs-court.cloudfunctions.net/getImageKitAuth',
-        options: Options(
-          headers: {'Authorization': 'Bearer $idToken'},
-        ),
-      );
+    if (!mounted) return;
+    setState(() => _isUploading = false);
 
-      final authData = authResponse.data;
-      final String token = authData['token'];
-      final int expire = authData['expire'];
-      final String signature = authData['signature'];
-
-      // Step 3: Prepare file data
-      Uint8List fileBytes;
-      String fileName;
-
-      if (_selectedImageBytes != null) {
-        fileBytes = _selectedImageBytes!;
-        fileName = 'profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      } else {
-        fileBytes = await _selectedImageFile!.readAsBytes();
-        fileName = _selectedImageFile!.path.split('/').last;
-      }
-
-      // Step 4: Upload to ImageKit
-      final formData = FormData.fromMap({
-        'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
-        'fileName': fileName,
-        'publicKey': AppConfig.imagekitPublicKey,
-        'token': token,
-        'expire': expire,
-        'signature': signature,
-        'useUniqueFileName': 'true',
-        'folder': '/profiles',
-      });
-
-      final uploadResponse = await dio.post(
-        'https://upload.imagekit.io/api/v1/files/upload',
-        data: formData,
-        options: Options(
-          headers: {'Accept': 'application/json'},
-        ),
-        onSendProgress: (sent, total) {
-          if (total > 0) {
-            setState(() {
-              _uploadProgress = sent / total;
-            });
-          }
-        },
-      );
-
-      if (uploadResponse.statusCode == 200) {
-        final imageUrl = uploadResponse.data['url'] as String;
-        if (!mounted) return;
-        setState(() => _isUploading = false);
-        // Store imageUrl to Firestore — will be connected later
-        Navigator.pushReplacementNamed(context, AppRoutes.location);
-      } else {
-        throw Exception('Upload failed with status: ${uploadResponse.statusCode}');
-      }
-    } catch (e) {
-      if (!mounted) return;
-      String errorMsg;
-      if (e is DioException && e.response != null) {
-        final responseData = e.response!.data;
-        if (responseData is Map) {
-          errorMsg = responseData['error']?.toString() ?? e.toString();
-        } else {
-          errorMsg = 'Status ${e.response!.statusCode}: ${e.toString()}';
-        }
-      } else {
-        errorMsg = e.toString();
-      }
+    if (result['success'] == true) {
+      Navigator.pushReplacementNamed(context, AppRoutes.location);
+    } else {
       setState(() {
-        _isUploading = false;
-        _errorMessage = errorMsg;
+        _errorMessage = result['error'] ?? 'Upload failed';
       });
     }
   }
@@ -234,23 +155,11 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
               ),
               SizedBox(height: 32.h),
 
-              // Upload progress
+              // Uploading
               if (_isUploading) ...[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8.r),
-                  child: LinearProgressIndicator(
-                    value: _uploadProgress,
-                    minHeight: 6.h,
-                    backgroundColor:
-                        AppColors.primary.withValues(alpha: 0.1),
-                    color: AppColors.primary,
-                  ),
-                ),
+                const CircularProgressIndicator(color: AppColors.primary),
                 SizedBox(height: 8.h),
-                Text(
-                  'Uploading... ${(_uploadProgress * 100).toInt()}%',
-                  style: AppTextStyles.caption,
-                ),
+                Text('Uploading...', style: AppTextStyles.caption),
                 SizedBox(height: 16.h),
               ],
 
