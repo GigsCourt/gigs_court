@@ -6,24 +6,33 @@ const imagekitPrivateKey = defineSecret("IMAGEKIT_PRIVATE_KEY");
 
 export const getImageKitAuth = functions
   .runWith({secrets: [imagekitPrivateKey]})
-  .https.onCall((data, context) => {
-    if (!context.auth) {
-      throw new functions.https.HttpsError(
-        "unauthenticated",
-        "You must be signed in to upload files."
-      );
+  .https.onRequest(async (req, res) => {
+    // Check Firebase Auth token from Authorization header
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      res.status(401).json({error: "Unauthorized"});
+      return;
+    }
+
+    // Set CORS headers
+    res.set("Access-Control-Allow-Origin", "*");
+    res.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+
+    if (req.method === "OPTIONS") {
+      res.status(204).send("");
+      return;
     }
 
     const token = crypto.randomUUID();
     const expire = Math.floor(Date.now() / 1000) + 3600;
     const signature = crypto
       .createHmac("sha1", imagekitPrivateKey.value())
-      .update(token + expire)
+      .update(`${token}${expire}`)
       .digest("hex");
 
-    return {
-      token,
-      expire,
-      signature,
-    };
+    res.status(200).json({
+      token: String(token),
+      expire: Number(expire),
+      signature: String(signature),
+    });
   });

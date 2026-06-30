@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
-import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../config/theme.dart';
 import '../../config/app_config.dart';
 import '../../config/routes.dart';
@@ -69,15 +69,26 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
     });
 
     try {
-      // Step 1: Get auth params from Cloud Function
-      final functions = FirebaseFunctions.instanceFor(region: 'us-central1');
-      final callable = functions.httpsCallable('getImageKitAuth');
-      final authResult = await callable.call();
-      final token = authResult.data['token'];
-      final expire = authResult.data['expire'];
-      final signature = authResult.data['signature'];
+      // Step 1: Get Firebase Auth token
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('Not authenticated');
+      final idToken = await user.getIdToken();
 
-      // Step 2: Prepare file data
+      // Step 2: Get auth params from Cloud Function via HTTP
+      final dio = Dio();
+      final authResponse = await dio.get(
+        'https://us-central1-gigs-court.cloudfunctions.net/getImageKitAuth',
+        options: Options(
+          headers: {'Authorization': 'Bearer $idToken'},
+        ),
+      );
+
+      final authData = authResponse.data;
+      final String token = authData['token'];
+      final int expire = authData['expire'];
+      final String signature = authData['signature'];
+
+      // Step 3: Prepare file data
       Uint8List fileBytes;
       String fileName;
 
@@ -89,20 +100,24 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
         fileName = _selectedImageFile!.path.split('/').last;
       }
 
-      // Step 3: Upload to ImageKit
-      final dio = Dio();
+      // Step 4: Upload to ImageKit
       final formData = FormData.fromMap({
         'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
+        'fileName': fileName,
         'publicKey': AppConfig.imagekitPublicKey,
         'token': token,
-        'expire': expire.toString(),
+        'expire': expire,
         'signature': signature,
-        'fileName': fileName,
+        'useUniqueFileName': 'true',
+        'folder': '/profiles',
       });
 
-      final response = await dio.post(
+      final uploadResponse = await dio.post(
         'https://upload.imagekit.io/api/v1/files/upload',
         data: formData,
+        options: Options(
+          headers: {'Accept': 'application/json'},
+        ),
         onSendProgress: (sent, total) {
           if (total > 0) {
             setState(() {
@@ -112,19 +127,20 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
         },
       );
 
-      if (response.statusCode == 200) {
+      if (uploadResponse.statusCode == 200) {
+        final imageUrl = uploadResponse.data['url'] as String;
         if (!mounted) return;
         setState(() => _isUploading = false);
-        // Store imageUrl: response.data['url']
-                Navigator.pushReplacementNamed(context, AppRoutes.location);
+        // Store imageUrl to Firestore — will be connected later
+        Navigator.pushReplacementNamed(context, AppRoutes.location);
       } else {
-        throw Exception('Upload failed');
+        throw Exception('Upload failed with status: ${uploadResponse.statusCode}');
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isUploading = false;
-        _errorMessage = 'Failed to upload photo. Please try again.';
+        _errorMessage = 'Upload failed: ${e.toString()}';
       });
     }
   }
