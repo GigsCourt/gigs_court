@@ -36,7 +36,7 @@ export const getImageKitAuth = functions
     const expire = Math.floor(Date.now() / 1000) + 3600;
     const signature = crypto
       .createHmac("sha1", imagekitPrivateKey.value())
-      .update(`${token}${expire}`)
+      .update(token + expire)
       .digest("hex");
 
     res.status(200).json({
