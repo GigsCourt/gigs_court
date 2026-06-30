@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import '../../config/routes.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../config/theme.dart';
 import '../../services/auth_service.dart';
-import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -18,17 +18,12 @@ class _AuthScreenState extends State<AuthScreen> {
 
   bool _isSignIn = true;
 
-  // Sign In controllers
   final _signInEmailController = TextEditingController();
   final _signInPasswordController = TextEditingController();
-
-  // Sign Up controllers
   final _signUpNameController = TextEditingController();
   final _signUpEmailController = TextEditingController();
   final _signUpPasswordController = TextEditingController();
   final _signUpConfirmPasswordController = TextEditingController();
-
-  // Forgot Password controller
   final _forgotPasswordEmailController = TextEditingController();
 
   bool _isLoading = false;
@@ -60,33 +55,21 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   String? _validateEmail(String value) {
-    if (value.trim().isEmpty) {
-      return 'Please enter your email address';
-    }
+    if (value.trim().isEmpty) return 'Please enter your email address';
     final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-    if (!emailRegex.hasMatch(value.trim())) {
-      return 'Please enter a valid email address';
-    }
+    if (!emailRegex.hasMatch(value.trim())) return 'Please enter a valid email address';
     return null;
   }
 
   String? _validatePassword(String value) {
-    if (value.isEmpty) {
-      return 'Please enter your password';
-    }
-    if (value.length < 8) {
-      return 'Password must be at least 8 characters';
-    }
+    if (value.isEmpty) return 'Please enter your password';
+    if (value.length < 8) return 'Password must be at least 8 characters';
     return null;
   }
 
   String? _validateConfirmPassword(String value) {
-    if (value.isEmpty) {
-      return 'Please confirm your password';
-    }
-    if (value != _signUpPasswordController.text) {
-      return 'Passwords do not match';
-    }
+    if (value.isEmpty) return 'Please confirm your password';
+    if (value != _signUpPasswordController.text) return 'Passwords do not match';
     return null;
   }
 
@@ -97,9 +80,7 @@ class _AuthScreenState extends State<AuthScreen> {
     final passwordError = _validatePassword(_signInPasswordController.text);
 
     if (emailError != null || passwordError != null) {
-      setState(() {
-        _errorMessage = emailError ?? passwordError;
-      });
+      setState(() => _errorMessage = emailError ?? passwordError);
       return;
     }
 
@@ -111,36 +92,22 @@ class _AuthScreenState extends State<AuthScreen> {
     );
 
     if (!mounted) return;
-
     setState(() => _isLoading = false);
 
-        if (result.success) {
-      if (!mounted) return;
+    if (result.success) {
       final authProvider = context.read<AuthProvider>();
       await authProvider.refreshUser();
+      await Future.delayed(const Duration(milliseconds: 500));
       if (!mounted) return;
 
-      switch (authProvider.status) {
-        case AuthStatus.emailNotVerified:
-          Navigator.pushReplacementNamed(
-            context,
-            AppRoutes.verifyEmail,
-            arguments: _signInEmailController.text.trim(),
-          );
-          break;
-        case AuthStatus.setupIncomplete:
-          Navigator.pushReplacementNamed(context, AppRoutes.profilePhoto);
-          break;
-        case AuthStatus.authenticated:
-          // Navigate to home — will be connected when home is built
-          break;
-        default:
-          break;
+      final status = authProvider.status;
+      if (status == AuthStatus.emailNotVerified) {
+        context.go('/verify-email', extra: _signInEmailController.text.trim());
+      } else {
+        context.go('/setup/photo');
       }
     } else {
-      setState(() {
-        _errorMessage = result.error;
-      });
+      setState(() => _errorMessage = result.error);
     }
   }
 
@@ -148,21 +115,16 @@ class _AuthScreenState extends State<AuthScreen> {
     _clearError();
 
     if (_signUpNameController.text.trim().isEmpty) {
-      setState(() {
-        _errorMessage = 'Please enter your full name';
-      });
+      setState(() => _errorMessage = 'Please enter your full name');
       return;
     }
 
     final emailError = _validateEmail(_signUpEmailController.text);
     final passwordError = _validatePassword(_signUpPasswordController.text);
-    final confirmError =
-        _validateConfirmPassword(_signUpConfirmPasswordController.text);
+    final confirmError = _validateConfirmPassword(_signUpConfirmPasswordController.text);
 
     if (emailError != null || passwordError != null || confirmError != null) {
-      setState(() {
-        _errorMessage = emailError ?? passwordError ?? confirmError;
-      });
+      setState(() => _errorMessage = emailError ?? passwordError ?? confirmError);
       return;
     }
 
@@ -174,19 +136,12 @@ class _AuthScreenState extends State<AuthScreen> {
     );
 
     if (!mounted) return;
-
     setState(() => _isLoading = false);
 
     if (result.success) {
-      Navigator.pushReplacementNamed(
-        context,
-        AppRoutes.verifyEmail,
-        arguments: _signUpEmailController.text.trim(),
-      );
+      context.go('/verify-email', extra: _signUpEmailController.text.trim());
     } else {
-      setState(() {
-        _errorMessage = result.error;
-      });
+      setState(() => _errorMessage = result.error);
     }
   }
 
@@ -194,11 +149,8 @@ class _AuthScreenState extends State<AuthScreen> {
     _clearError();
 
     final emailError = _validateEmail(_forgotPasswordEmailController.text);
-
     if (emailError != null) {
-      setState(() {
-        _errorMessage = emailError;
-      });
+      setState(() => _errorMessage = emailError);
       return;
     }
 
@@ -209,7 +161,6 @@ class _AuthScreenState extends State<AuthScreen> {
     );
 
     if (!mounted) return;
-
     setState(() => _isLoading = false);
 
     if (result.success) {
@@ -224,9 +175,7 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
       );
     } else {
-      setState(() {
-        _errorMessage = result.error;
-      });
+      setState(() => _errorMessage = result.error);
     }
   }
 
@@ -274,22 +223,12 @@ class _AuthScreenState extends State<AuthScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(height: 40.h),
-        Text(
-          'Welcome back',
-          textAlign: TextAlign.center,
-          style: AppTextStyles.headline1,
-        ),
+        Text('Welcome back', textAlign: TextAlign.center, style: AppTextStyles.headline1),
         SizedBox(height: 8.h),
-        Text(
-          'Sign in to continue',
-          textAlign: TextAlign.center,
-          style: AppTextStyles.bodyMedium.copyWith(
-            color: AppColors.primary.withValues(alpha: 0.6),
-          ),
-        ),
+        Text('Sign in to continue', textAlign: TextAlign.center,
+            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.6))),
         SizedBox(height: 40.h),
 
-        // Error message
         if (_errorMessage != null) ...[
           Container(
             padding: EdgeInsets.all(12.w),
@@ -297,25 +236,15 @@ class _AuthScreenState extends State<AuthScreen> {
               color: AppColors.error.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12.r),
             ),
-            child: Row(
-              children: [
-                Icon(Icons.error_outline, color: AppColors.error, size: 20.sp),
-                SizedBox(width: 8.w),
-                Expanded(
-                  child: Text(
-                    _errorMessage!,
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.error,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            child: Row(children: [
+              Icon(Icons.error_outline, color: AppColors.error, size: 20.sp),
+              SizedBox(width: 8.w),
+              Expanded(child: Text(_errorMessage!, style: AppTextStyles.bodySmall.copyWith(color: AppColors.error))),
+            ]),
           ),
           SizedBox(height: 16.h),
         ],
 
-        // Email field
         Text('Email', style: AppTextStyles.label),
         SizedBox(height: 8.h),
         TextField(
@@ -325,19 +254,12 @@ class _AuthScreenState extends State<AuthScreen> {
           style: AppTextStyles.bodyMedium,
           decoration: InputDecoration(
             hintText: 'Enter your email',
-            hintStyle: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.primary.withValues(alpha: 0.3),
-            ),
-            prefixIcon: Icon(
-              Icons.email_outlined,
-              size: 20.sp,
-              color: AppColors.primary.withValues(alpha: 0.4),
-            ),
+            hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.3)),
+            prefixIcon: Icon(Icons.email_outlined, size: 20.sp, color: AppColors.primary.withValues(alpha: 0.4)),
           ),
         ),
         SizedBox(height: 16.h),
 
-        // Password field
         Text('Password', style: AppTextStyles.label),
         SizedBox(height: 8.h),
         TextField(
@@ -347,92 +269,41 @@ class _AuthScreenState extends State<AuthScreen> {
           style: AppTextStyles.bodyMedium,
           decoration: InputDecoration(
             hintText: 'Enter your password',
-            hintStyle: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.primary.withValues(alpha: 0.3),
-            ),
-            prefixIcon: Icon(
-              Icons.lock_outlined,
-              size: 20.sp,
-              color: AppColors.primary.withValues(alpha: 0.4),
-            ),
+            hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.3)),
+            prefixIcon: Icon(Icons.lock_outlined, size: 20.sp, color: AppColors.primary.withValues(alpha: 0.4)),
             suffixIcon: IconButton(
-              icon: Icon(
-                _obscureSignInPassword
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-                size: 20.sp,
-                color: AppColors.primary.withValues(alpha: 0.4),
-              ),
-              onPressed: () {
-                setState(() {
-                  _obscureSignInPassword = !_obscureSignInPassword;
-                });
-              },
+              icon: Icon(_obscureSignInPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  size: 20.sp, color: AppColors.primary.withValues(alpha: 0.4)),
+              onPressed: () => setState(() => _obscureSignInPassword = !_obscureSignInPassword),
             ),
           ),
         ),
         SizedBox(height: 8.h),
 
-        // Forgot password
         Align(
           alignment: Alignment.centerRight,
           child: TextButton(
-            onPressed: () {
-              setState(() {
-                _isForgotPassword = true;
-                _errorMessage = null;
-              });
-            },
-            child: Text(
-              'Forgot Password?',
-              style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.primary.withValues(alpha: 0.7),
-              ),
-            ),
+            onPressed: () => setState(() { _isForgotPassword = true; _errorMessage = null; }),
+            child: Text('Forgot Password?', style: AppTextStyles.bodySmall.copyWith(color: AppColors.primary.withValues(alpha: 0.7))),
           ),
         ),
         SizedBox(height: 16.h),
 
-        // Sign In button
         SizedBox(
           height: 56.h,
           child: ElevatedButton(
             onPressed: _isLoading ? null : _handleSignIn,
             child: _isLoading
-                ? SizedBox(
-                    height: 22.h,
-                    width: 22.w,
-                    child: const CircularProgressIndicator(
-                      color: AppColors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
+                ? SizedBox(height: 22.h, width: 22.w, child: const CircularProgressIndicator(color: AppColors.white, strokeWidth: 2))
                 : Text('Sign In', style: AppTextStyles.button),
           ),
         ),
         SizedBox(height: 24.h),
 
-        // Toggle to Sign Up
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              "Don't have an account? ",
-              style: AppTextStyles.bodyMedium.copyWith(
-                color: AppColors.primary.withValues(alpha: 0.6),
-              ),
-            ),
-            GestureDetector(
-              onTap: _toggleAuthMode,
-              child: Text(
-                'Sign Up',
-                style: AppTextStyles.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Text("Don't have an account? ", style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.6))),
+          GestureDetector(onTap: _toggleAuthMode, child: Text('Sign Up', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600))),
+        ]),
         SizedBox(height: 40.h),
       ],
     );
@@ -444,22 +315,12 @@ class _AuthScreenState extends State<AuthScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(height: 40.h),
-        Text(
-          'Create Account',
-          textAlign: TextAlign.center,
-          style: AppTextStyles.headline1,
-        ),
+        Text('Create Account', textAlign: TextAlign.center, style: AppTextStyles.headline1),
         SizedBox(height: 8.h),
-        Text(
-          'Sign up to get started',
-          textAlign: TextAlign.center,
-          style: AppTextStyles.bodyMedium.copyWith(
-            color: AppColors.primary.withValues(alpha: 0.6),
-          ),
-        ),
+        Text('Sign up to get started', textAlign: TextAlign.center,
+            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.6))),
         SizedBox(height: 40.h),
 
-        // Error message
         if (_errorMessage != null) ...[
           Container(
             padding: EdgeInsets.all(12.w),
@@ -467,25 +328,15 @@ class _AuthScreenState extends State<AuthScreen> {
               color: AppColors.error.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12.r),
             ),
-            child: Row(
-              children: [
-                Icon(Icons.error_outline, color: AppColors.error, size: 20.sp),
-                SizedBox(width: 8.w),
-                Expanded(
-                  child: Text(
-                    _errorMessage!,
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.error,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            child: Row(children: [
+              Icon(Icons.error_outline, color: AppColors.error, size: 20.sp),
+              SizedBox(width: 8.w),
+              Expanded(child: Text(_errorMessage!, style: AppTextStyles.bodySmall.copyWith(color: AppColors.error))),
+            ]),
           ),
           SizedBox(height: 16.h),
         ],
 
-        // Full Name field
         Text('Full Name', style: AppTextStyles.label),
         SizedBox(height: 8.h),
         TextField(
@@ -494,19 +345,12 @@ class _AuthScreenState extends State<AuthScreen> {
           style: AppTextStyles.bodyMedium,
           decoration: InputDecoration(
             hintText: 'Enter your full name',
-            hintStyle: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.primary.withValues(alpha: 0.3),
-            ),
-            prefixIcon: Icon(
-              Icons.person_outlined,
-              size: 20.sp,
-              color: AppColors.primary.withValues(alpha: 0.4),
-            ),
+            hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.3)),
+            prefixIcon: Icon(Icons.person_outlined, size: 20.sp, color: AppColors.primary.withValues(alpha: 0.4)),
           ),
         ),
         SizedBox(height: 16.h),
 
-        // Email field
         Text('Email', style: AppTextStyles.label),
         SizedBox(height: 8.h),
         TextField(
@@ -516,19 +360,12 @@ class _AuthScreenState extends State<AuthScreen> {
           style: AppTextStyles.bodyMedium,
           decoration: InputDecoration(
             hintText: 'Enter your email',
-            hintStyle: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.primary.withValues(alpha: 0.3),
-            ),
-            prefixIcon: Icon(
-              Icons.email_outlined,
-              size: 20.sp,
-              color: AppColors.primary.withValues(alpha: 0.4),
-            ),
+            hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.3)),
+            prefixIcon: Icon(Icons.email_outlined, size: 20.sp, color: AppColors.primary.withValues(alpha: 0.4)),
           ),
         ),
         SizedBox(height: 16.h),
 
-        // Password field
         Text('Password', style: AppTextStyles.label),
         SizedBox(height: 8.h),
         TextField(
@@ -538,33 +375,17 @@ class _AuthScreenState extends State<AuthScreen> {
           style: AppTextStyles.bodyMedium,
           decoration: InputDecoration(
             hintText: 'Min. 8 characters',
-            hintStyle: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.primary.withValues(alpha: 0.3),
-            ),
-            prefixIcon: Icon(
-              Icons.lock_outlined,
-              size: 20.sp,
-              color: AppColors.primary.withValues(alpha: 0.4),
-            ),
+            hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.3)),
+            prefixIcon: Icon(Icons.lock_outlined, size: 20.sp, color: AppColors.primary.withValues(alpha: 0.4)),
             suffixIcon: IconButton(
-              icon: Icon(
-                _obscureSignUpPassword
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-                size: 20.sp,
-                color: AppColors.primary.withValues(alpha: 0.4),
-              ),
-              onPressed: () {
-                setState(() {
-                  _obscureSignUpPassword = !_obscureSignUpPassword;
-                });
-              },
+              icon: Icon(_obscureSignUpPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  size: 20.sp, color: AppColors.primary.withValues(alpha: 0.4)),
+              onPressed: () => setState(() => _obscureSignUpPassword = !_obscureSignUpPassword),
             ),
           ),
         ),
         SizedBox(height: 16.h),
 
-        // Confirm Password field
         Text('Confirm Password', style: AppTextStyles.label),
         SizedBox(height: 8.h),
         TextField(
@@ -574,73 +395,32 @@ class _AuthScreenState extends State<AuthScreen> {
           style: AppTextStyles.bodyMedium,
           decoration: InputDecoration(
             hintText: 'Re-enter your password',
-            hintStyle: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.primary.withValues(alpha: 0.3),
-            ),
-            prefixIcon: Icon(
-              Icons.lock_outlined,
-              size: 20.sp,
-              color: AppColors.primary.withValues(alpha: 0.4),
-            ),
+            hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.3)),
+            prefixIcon: Icon(Icons.lock_outlined, size: 20.sp, color: AppColors.primary.withValues(alpha: 0.4)),
             suffixIcon: IconButton(
-              icon: Icon(
-                _obscureSignUpConfirmPassword
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-                size: 20.sp,
-                color: AppColors.primary.withValues(alpha: 0.4),
-              ),
-              onPressed: () {
-                setState(() {
-                  _obscureSignUpConfirmPassword =
-                      !_obscureSignUpConfirmPassword;
-                });
-              },
+              icon: Icon(_obscureSignUpConfirmPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  size: 20.sp, color: AppColors.primary.withValues(alpha: 0.4)),
+              onPressed: () => setState(() => _obscureSignUpConfirmPassword = !_obscureSignUpConfirmPassword),
             ),
           ),
         ),
         SizedBox(height: 24.h),
 
-        // Sign Up button
         SizedBox(
           height: 56.h,
           child: ElevatedButton(
             onPressed: _isLoading ? null : _handleSignUp,
             child: _isLoading
-                ? SizedBox(
-                    height: 22.h,
-                    width: 22.w,
-                    child: const CircularProgressIndicator(
-                      color: AppColors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
+                ? SizedBox(height: 22.h, width: 22.w, child: const CircularProgressIndicator(color: AppColors.white, strokeWidth: 2))
                 : Text('Sign Up', style: AppTextStyles.button),
           ),
         ),
         SizedBox(height: 24.h),
 
-        // Toggle to Sign In
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'Already have an account? ',
-              style: AppTextStyles.bodyMedium.copyWith(
-                color: AppColors.primary.withValues(alpha: 0.6),
-              ),
-            ),
-            GestureDetector(
-              onTap: _toggleAuthMode,
-              child: Text(
-                'Sign In',
-                style: AppTextStyles.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Text('Already have an account? ', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.6))),
+          GestureDetector(onTap: _toggleAuthMode, child: Text('Sign In', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600))),
+        ]),
         SizedBox(height: 40.h),
       ],
     );
@@ -652,22 +432,12 @@ class _AuthScreenState extends State<AuthScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(height: 40.h),
-        Text(
-          'Forgot Password',
-          textAlign: TextAlign.center,
-          style: AppTextStyles.headline1,
-        ),
+        Text('Forgot Password', textAlign: TextAlign.center, style: AppTextStyles.headline1),
         SizedBox(height: 8.h),
-        Text(
-          'Enter your email and we\'ll send you a reset link',
-          textAlign: TextAlign.center,
-          style: AppTextStyles.bodyMedium.copyWith(
-            color: AppColors.primary.withValues(alpha: 0.6),
-          ),
-        ),
+        Text('Enter your email and we\'ll send you a reset link', textAlign: TextAlign.center,
+            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.6))),
         SizedBox(height: 40.h),
 
-        // Error message
         if (_errorMessage != null) ...[
           Container(
             padding: EdgeInsets.all(12.w),
@@ -675,25 +445,15 @@ class _AuthScreenState extends State<AuthScreen> {
               color: AppColors.error.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12.r),
             ),
-            child: Row(
-              children: [
-                Icon(Icons.error_outline, color: AppColors.error, size: 20.sp),
-                SizedBox(width: 8.w),
-                Expanded(
-                  child: Text(
-                    _errorMessage!,
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.error,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            child: Row(children: [
+              Icon(Icons.error_outline, color: AppColors.error, size: 20.sp),
+              SizedBox(width: 8.w),
+              Expanded(child: Text(_errorMessage!, style: AppTextStyles.bodySmall.copyWith(color: AppColors.error))),
+            ]),
           ),
           SizedBox(height: 16.h),
         ],
 
-        // Email field
         Text('Email', style: AppTextStyles.label),
         SizedBox(height: 8.h),
         TextField(
@@ -703,51 +463,26 @@ class _AuthScreenState extends State<AuthScreen> {
           style: AppTextStyles.bodyMedium,
           decoration: InputDecoration(
             hintText: 'Enter your email',
-            hintStyle: AppTextStyles.bodyMedium.copyWith(
-              color: AppColors.primary.withValues(alpha: 0.3),
-            ),
-            prefixIcon: Icon(
-              Icons.email_outlined,
-              size: 20.sp,
-              color: AppColors.primary.withValues(alpha: 0.4),
-            ),
+            hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.3)),
+            prefixIcon: Icon(Icons.email_outlined, size: 20.sp, color: AppColors.primary.withValues(alpha: 0.4)),
           ),
         ),
         SizedBox(height: 24.h),
 
-        // Send Reset Link button
         SizedBox(
           height: 56.h,
           child: ElevatedButton(
             onPressed: _isLoading ? null : _handleForgotPassword,
             child: _isLoading
-                ? SizedBox(
-                    height: 22.h,
-                    width: 22.w,
-                    child: const CircularProgressIndicator(
-                      color: AppColors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
+                ? SizedBox(height: 22.h, width: 22.w, child: const CircularProgressIndicator(color: AppColors.white, strokeWidth: 2))
                 : Text('Send Reset Link', style: AppTextStyles.button),
           ),
         ),
         SizedBox(height: 16.h),
 
-        // Back to Sign In
         TextButton(
-          onPressed: () {
-            setState(() {
-              _isForgotPassword = false;
-              _errorMessage = null;
-            });
-          },
-          child: Text(
-            'Back to Sign In',
-            style: AppTextStyles.bodyMedium.copyWith(
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          onPressed: () => setState(() { _isForgotPassword = false; _errorMessage = null; }),
+          child: Text('Back to Sign In', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w500)),
         ),
         SizedBox(height: 40.h),
       ],
