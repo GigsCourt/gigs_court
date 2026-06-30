@@ -166,166 +166,159 @@ class _ServicesScreenState extends State<ServicesScreen> {
           onPressed: () => context.pop(),
         ),
       ),
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 24.w),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(height: 20.h),
-                  Text('What services do you offer?', style: AppTextStyles.headline2),
-                  SizedBox(height: 12.h),
-                  Text(
-                    'Select the services you offer. If you skip, you won\'t appear as a provider yet. You can add or submit custom services anytime from your profile to be discoverable to clients who needs your service.',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: AppColors.primary.withValues(alpha: 0.6),
-                    ),
-                  ),
-                  SizedBox(height: 20.h),
-
-                  TextField(
-                    controller: _searchController,
-                    onChanged: _onSearchChanged,
-                    style: AppTextStyles.bodyMedium,
-                    decoration: InputDecoration(
-                      hintText: 'Search services...',
-                      hintStyle: AppTextStyles.bodyMedium.copyWith(
-                        color: AppColors.primary.withValues(alpha: 0.3),
-                      ),
-                      prefixIcon: Icon(
-                        Icons.search,
-                        size: 20.sp,
-                        color: AppColors.primary.withValues(alpha: 0.5),
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24.w),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(height: 16.h),
+                    Text('What services do you offer?', style: AppTextStyles.headline2),
+                    SizedBox(height: 8.h),
+                    Text(
+                      'Select the services you offer. If you skip, you won\'t appear as a provider yet. You can add or submit custom services anytime from your profile to be discoverable to clients who needs your service.',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.primary.withValues(alpha: 0.6),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-
-            if (_selectedServiceNames.isNotEmpty)
-              Container(
-                height: 50.h,
-                margin: EdgeInsets.only(top: 12.h),
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: EdgeInsets.symmetric(horizontal: 24.w),
-                  itemCount: _selectedServiceNames.length,
-                  separatorBuilder: (_, _) => SizedBox(width: 8.w),
-                  itemBuilder: (context, index) {
-                    final name = _selectedServiceNames.elementAt(index);
-                    return Chip(
-                      label: Text(
-                        name,
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: AppColors.white,
+                    SizedBox(height: 16.h),
+                    TextField(
+                      controller: _searchController,
+                      onChanged: _onSearchChanged,
+                      style: AppTextStyles.bodyMedium,
+                      decoration: InputDecoration(
+                        hintText: 'Search services...',
+                        hintStyle: AppTextStyles.bodyMedium.copyWith(
+                          color: AppColors.primary.withValues(alpha: 0.3),
+                        ),
+                        prefixIcon: Icon(
+                          Icons.search,
+                          size: 20.sp,
+                          color: AppColors.primary.withValues(alpha: 0.5),
                         ),
                       ),
-                      backgroundColor: AppColors.primary,
-                      deleteIcon: Icon(
-                        Icons.close,
-                        size: 16.sp,
-                        color: AppColors.white,
-                      ),
-                      onDeleted: () {
-                        final id = _selectedServiceIds.elementAt(index);
-                        _toggleService(id, name);
-                      },
-                    );
-                  },
+                    ),
+                  ],
                 ),
               ),
 
-            SizedBox(height: 12.h),
-
-            if (!_isSearching)
-              SizedBox(
-                height: 40.h,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: EdgeInsets.symmetric(horizontal: 24.w),
-                  itemCount: _categories.length,
-                  separatorBuilder: (_, _) => SizedBox(width: 8.w),
-                  itemBuilder: (context, index) {
-                    final category = _categories[index];
-                    final isSelected = category == _selectedCategory;
-                    return GestureDetector(
-                      onTap: () => _onCategorySelected(category),
-                      child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.primary
-                              : AppColors.primary.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(20.r),
+              if (_selectedServiceNames.isNotEmpty)
+                Container(
+                  height: 44.h,
+                  margin: EdgeInsets.only(top: 8.h),
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: EdgeInsets.symmetric(horizontal: 24.w),
+                    itemCount: _selectedServiceNames.length,
+                    separatorBuilder: (_, _) => SizedBox(width: 8.w),
+                    itemBuilder: (context, index) {
+                      final name = _selectedServiceNames.elementAt(index);
+                      return Chip(
+                        label: Text(
+                          name,
+                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.white),
                         ),
-                        child: Text(
-                          category,
-                          style: AppTextStyles.bodySmall.copyWith(
+                        backgroundColor: AppColors.primary,
+                        deleteIcon: Icon(Icons.close, size: 16.sp, color: AppColors.white),
+                        onDeleted: () {
+                          final id = _selectedServiceIds.elementAt(index);
+                          _toggleService(id, name);
+                        },
+                      );
+                    },
+                  ),
+                ),
+
+              SizedBox(height: 8.h),
+
+              if (!_isSearching)
+                SizedBox(
+                  height: 36.h,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: EdgeInsets.symmetric(horizontal: 24.w),
+                    itemCount: _categories.length,
+                    separatorBuilder: (_, _) => SizedBox(width: 8.w),
+                    itemBuilder: (context, index) {
+                      final category = _categories[index];
+                      final isSelected = category == _selectedCategory;
+                      return GestureDetector(
+                        onTap: () => _onCategorySelected(category),
+                        child: Container(
+                          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 6.h),
+                          decoration: BoxDecoration(
                             color: isSelected
-                                ? AppColors.white
-                                : AppColors.primary,
-                            fontWeight: FontWeight.w500,
+                                ? AppColors.primary
+                                : AppColors.primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(20.r),
+                          ),
+                          child: Text(
+                            category,
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: isSelected ? AppColors.white : AppColors.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
+                      );
+                    },
+                  ),
+                ),
+
+              SizedBox(height: 8.h),
+
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _isSearching
+                        ? _buildSearchResults()
+                        : _buildCategoryServices(),
+              ),
+
+              Padding(
+                padding: EdgeInsets.fromLTRB(24.w, 12.h, 24.w, 32.h),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48.h,
+                      child: ElevatedButton(
+                        onPressed: (_selectedServiceIds.isNotEmpty && !_isSaving)
+                            ? _handleContinue
+                            : null,
+                        child: _isSaving
+                            ? SizedBox(
+                                height: 20.h,
+                                width: 20.w,
+                                child: const CircularProgressIndicator(
+                                  color: AppColors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Text('Continue', style: AppTextStyles.button),
                       ),
-                    );
-                  },
+                    ),
+                    SizedBox(height: 6.h),
+                    GestureDetector(
+                      onTap: () => context.go('/home'),
+                      child: Text(
+                        'Skip for now',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-
-            SizedBox(height: 12.h),
-
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _isSearching
-                      ? _buildSearchResults()
-                      : _buildCategoryServices(),
-            ),
-
-            Padding(
-              padding: EdgeInsets.fromLTRB(24.w, 16.h, 24.w, 40.h),
-              child: Column(
-                children: [
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56.h,
-                    child: ElevatedButton(
-                      onPressed: (_selectedServiceIds.isNotEmpty && !_isSaving)
-                          ? _handleContinue
-                          : null,
-                      child: _isSaving
-                          ? SizedBox(
-                              height: 22.h,
-                              width: 22.w,
-                              child: const CircularProgressIndicator(
-                                color: AppColors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : Text('Continue', style: AppTextStyles.button),
-                    ),
-                  ),
-                  SizedBox(height: 8.h),
-                  TextButton(
-                    onPressed: () {
-                      context.go('/home');
-                    },
-                    child: Text(
-                      'Skip for now',
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -345,6 +338,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
           return ListTile(
             contentPadding: EdgeInsets.zero,
+            dense: true,
             leading: Checkbox(
               value: selected,
               activeColor: AppColors.primary,
@@ -398,6 +392,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
         return ListTile(
           contentPadding: EdgeInsets.zero,
+          dense: true,
           leading: Checkbox(
             value: selected,
             activeColor: AppColors.primary,

@@ -202,15 +202,18 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.symmetric(horizontal: 24.w),
-            child: _isForgotPassword
-                ? _buildForgotPasswordForm()
-                : _isSignIn
-                    ? _buildSignInForm()
-                    : _buildSignUpForm(),
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(horizontal: 24.w),
+              child: _isForgotPassword
+                  ? _buildForgotPasswordForm()
+                  : _isSignIn
+                      ? _buildSignInForm()
+                      : _buildSignUpForm(),
+            ),
           ),
         ),
       ),
