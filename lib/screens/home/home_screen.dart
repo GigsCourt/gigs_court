@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../config/theme.dart';
-import '../../config/routes.dart';
 import '../../providers/auth_provider.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -21,7 +21,7 @@ class HomeScreen extends StatelessWidget {
               final authProvider = context.read<AuthProvider>();
               await authProvider.signOut();
               if (context.mounted) {
-                Navigator.pushReplacementNamed(context, AppRoutes.onboarding);
+                context.go('/onboarding');
               }
             },
           ),

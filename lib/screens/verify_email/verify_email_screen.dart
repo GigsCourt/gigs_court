@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 import '../../config/theme.dart';
-import '../../config/routes.dart';
 import '../../services/auth_service.dart';
 
 class VerifyEmailScreen extends StatefulWidget {
@@ -73,7 +73,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
     setState(() => _isChecking = false);
 
     if (verified) {
-      Navigator.pushReplacementNamed(context, AppRoutes.profilePhoto);
+      context.go('/setup/photo');
     } else {
       setState(() {
         _errorMessage = 'Email not verified yet. Please check your inbox.';
@@ -88,7 +88,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios_new, size: 20.sp),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => context.pop(),
         ),
       ),
       body: SafeArea(
@@ -220,7 +220,7 @@ class _VerifyEmailScreenState extends State<VerifyEmailScreen> {
               Padding(
                 padding: EdgeInsets.only(bottom: 40.h),
                 child: GestureDetector(
-                  onTap: () => Navigator.pop(context),
+                  onTap: () => context.pop(),
                   child: Text(
                     'Wrong email? Go back and update it.',
                     style: AppTextStyles.bodySmall.copyWith(

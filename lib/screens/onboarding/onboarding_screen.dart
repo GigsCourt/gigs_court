@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import '../../config/routes.dart';
+import 'package:go_router/go_router.dart';
 import '../../config/theme.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -49,7 +49,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         curve: Curves.easeInOut,
       );
     } else {
-      Navigator.pushReplacementNamed(context, AppRoutes.auth);
+      context.go('/auth');
     }
   }
 
@@ -67,7 +67,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   alignment: Alignment.topRight,
                   child: TextButton(
                     onPressed: () {
-                      Navigator.pushReplacementNamed(context, AppRoutes.auth);
+                      context.go('/auth');
                     },
                     child: Text(
                       'Skip',

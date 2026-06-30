@@ -3,10 +3,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'config/routes.dart';
+import 'config/router.dart';
 import 'config/theme.dart';
 import 'providers/auth_provider.dart';
-import 'screens/splash/splash_screen.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -36,12 +35,11 @@ class GigsCourtApp extends StatelessWidget {
         minTextAdapt: true,
         splitScreenMode: true,
         builder: (context, child) {
-          return MaterialApp(
+          return MaterialApp.router(
             title: 'GigsCourt',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
-            home: const SplashScreen(),
-            onGenerateRoute: AppRoutes.onGenerateRoute,
+            routerConfig: appRouter,
           );
         },
       ),

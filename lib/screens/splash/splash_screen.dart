@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../../config/routes.dart';
 import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
 
@@ -42,24 +42,20 @@ class _SplashScreenState extends State<SplashScreen>
 
     switch (status) {
       case AuthStatus.unauthenticated:
-        Navigator.pushReplacementNamed(context, AppRoutes.onboarding);
+        context.go('/onboarding');
         break;
       case AuthStatus.emailNotVerified:
         final email = authProvider.user?.email ?? '';
-        Navigator.pushReplacementNamed(
-          context,
-          AppRoutes.verifyEmail,
-          arguments: email,
-        );
+        context.go('/verify-email', extra: email);
         break;
       case AuthStatus.setupIncomplete:
-        Navigator.pushReplacementNamed(context, AppRoutes.profilePhoto);
+        context.go('/setup/photo');
         break;
       case AuthStatus.authenticated:
-        Navigator.pushReplacementNamed(context, AppRoutes.home);
+        context.go('/home');
         break;
       default:
-        Navigator.pushReplacementNamed(context, AppRoutes.onboarding);
+        context.go('/onboarding');
     }
   }
 

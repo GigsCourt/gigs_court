@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:go_router/go_router.dart';
 import '../../config/theme.dart';
-import '../../config/routes.dart';
 
 class ServicesScreen extends StatefulWidget {
   const ServicesScreen({super.key});
@@ -153,7 +153,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
     await Future.delayed(const Duration(seconds: 1));
     if (!mounted) return;
     setState(() => _isSaving = false);
-    Navigator.pushReplacementNamed(context, AppRoutes.home);
+    context.go('/home');
   }
 
   @override
@@ -163,7 +163,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios_new, size: 20.sp),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => context.pop(),
         ),
       ),
       body: SafeArea(
@@ -186,7 +186,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
                   ),
                   SizedBox(height: 20.h),
 
-                  // Search input
                   TextField(
                     controller: _searchController,
                     onChanged: _onSearchChanged,
@@ -207,7 +206,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
               ),
             ),
 
-            // Selected services chips
             if (_selectedServiceNames.isNotEmpty)
               Container(
                 height: 50.h,
@@ -243,7 +241,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
             SizedBox(height: 12.h),
 
-            // Category tabs
             if (!_isSearching)
               SizedBox(
                 height: 40.h,
@@ -282,7 +279,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
             SizedBox(height: 12.h),
 
-            // Service list
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
@@ -291,7 +287,6 @@ class _ServicesScreenState extends State<ServicesScreen> {
                       : _buildCategoryServices(),
             ),
 
-            // Bottom buttons
             Padding(
               padding: EdgeInsets.fromLTRB(24.w, 16.h, 24.w, 40.h),
               child: Column(
@@ -318,7 +313,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
                   SizedBox(height: 8.h),
                   TextButton(
                     onPressed: () {
-                      Navigator.pushReplacementNamed(context, AppRoutes.home);
+                      context.go('/home');
                     },
                     child: Text(
                       'Skip for now',

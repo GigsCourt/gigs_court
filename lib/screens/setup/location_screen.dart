@@ -3,8 +3,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:go_router/go_router.dart';
 import '../../config/theme.dart';
-import '../../config/routes.dart';
 
 class LocationScreen extends StatefulWidget {
   const LocationScreen({super.key});
@@ -139,11 +139,10 @@ class _LocationScreenState extends State<LocationScreen> {
 
   Future<void> _handleSave() async {
     setState(() => _isSaving = true);
-    // Save to Supabase — will be connected when provider data is set up
     await Future.delayed(const Duration(seconds: 1));
     if (!mounted) return;
     setState(() => _isSaving = false);
-    Navigator.pushReplacementNamed(context, AppRoutes.services);
+    context.go('/setup/services');
   }
 
   @override
@@ -152,7 +151,6 @@ class _LocationScreenState extends State<LocationScreen> {
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          // Full screen map
           if (_isMapReady || !_isFetchingLocation)
             GoogleMap(
               initialCameraPosition: CameraPosition(
@@ -174,7 +172,6 @@ class _LocationScreenState extends State<LocationScreen> {
           else
             Container(color: AppColors.primary.withValues(alpha: 0.1)),
 
-          // Loading / error overlay for location
           if (_isFetchingLocation)
             Container(
               color: AppColors.primary.withValues(alpha: 0.8),
@@ -229,7 +226,6 @@ class _LocationScreenState extends State<LocationScreen> {
               ),
             ),
 
-          // Center pin
           if (_isMapReady)
             Center(
               child: Column(
@@ -252,7 +248,6 @@ class _LocationScreenState extends State<LocationScreen> {
               ),
             ),
 
-          // Top app bar
           Positioned(
             top: 0,
             left: 0,
@@ -269,7 +264,7 @@ class _LocationScreenState extends State<LocationScreen> {
                       ),
                       child: IconButton(
                         icon: Icon(Icons.arrow_back_ios_new, size: 20.sp),
-                        onPressed: () => Navigator.pop(context),
+                        onPressed: () => context.pop(),
                       ),
                     ),
                     SizedBox(width: 8.w),
@@ -295,7 +290,6 @@ class _LocationScreenState extends State<LocationScreen> {
             ),
           ),
 
-          // Bottom sheet
           if (_isMapReady)
             Positioned(
               bottom: 0,
@@ -311,7 +305,6 @@ class _LocationScreenState extends State<LocationScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Address input
                     TextField(
                       controller: _addressController,
                       onChanged: (value) => _address = value,
@@ -347,8 +340,6 @@ class _LocationScreenState extends State<LocationScreen> {
                       style: AppTextStyles.caption,
                     ),
                     SizedBox(height: 16.h),
-
-                    // Save button
                     SizedBox(
                       width: double.infinity,
                       height: 56.h,
@@ -368,11 +359,9 @@ class _LocationScreenState extends State<LocationScreen> {
                       ),
                     ),
                     SizedBox(height: 8.h),
-
-                    // Skip
                     TextButton(
                       onPressed: () {
-                        Navigator.pushReplacementNamed(context, AppRoutes.services);
+                        context.go('/setup/services');
                       },
                       child: Text(
                         'Skip for now',

@@ -3,8 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:go_router/go_router.dart';
 import '../../config/theme.dart';
-import '../../config/routes.dart';
 import '../../services/imagekit_service.dart';
 
 class ProfilePhotoScreen extends StatefulWidget {
@@ -20,6 +20,13 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
   bool _isUploading = false;
   String? _errorMessage;
   final ImagePicker _picker = ImagePicker();
+  final TextEditingController _bioController = TextEditingController();
+
+  @override
+  void dispose() {
+    _bioController.dispose();
+    super.dispose();
+  }
 
   void _clearError() {
     if (_errorMessage != null) {
@@ -69,7 +76,7 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
     setState(() => _isUploading = false);
 
     if (result['success'] == true) {
-      Navigator.pushReplacementNamed(context, AppRoutes.location);
+      context.go('/setup/location');
     } else {
       setState(() {
         _errorMessage = result['error'] ?? 'Upload failed';
@@ -84,11 +91,11 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios_new, size: 20.sp),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => context.go('/auth'),
         ),
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: EdgeInsets.symmetric(horizontal: 24.w),
           child: Column(
             children: [
@@ -155,6 +162,28 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
               ),
               SizedBox(height: 32.h),
 
+              // Bio field
+              Text('Bio (optional)', style: AppTextStyles.label),
+              SizedBox(height: 8.h),
+              TextField(
+                controller: _bioController,
+                maxLines: 3,
+                maxLength: 300,
+                style: AppTextStyles.bodyMedium,
+                decoration: InputDecoration(
+                  hintText: 'Tell clients about yourself and your services...',
+                  hintStyle: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.primary.withValues(alpha: 0.3),
+                  ),
+                ),
+              ),
+              SizedBox(height: 4.h),
+              Text(
+                'This will appear on your profile.',
+                style: AppTextStyles.caption,
+              ),
+              SizedBox(height: 24.h),
+
               // Uploading
               if (_isUploading) ...[
                 const CircularProgressIndicator(color: AppColors.primary),
@@ -201,7 +230,7 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
                 ),
               ],
 
-              const Spacer(),
+              SizedBox(height: 24.h),
 
               // Continue button
               SizedBox(
