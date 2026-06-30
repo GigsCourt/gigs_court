@@ -22,7 +22,8 @@ jobs:
       - name: Set iOS deployment target and development team
         run: |
           cd ios
-          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 13.0/IPHONEOS_DEPLOYMENT_TARGET = 14.0/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 13.0/IPHONEOS_DEPLOYMENT_TARGET = 15.0/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 14.0/IPHONEOS_DEPLOYMENT_TARGET = 15.0/g' Runner.xcodeproj/project.pbxproj
           sed -i '' 's/DEVELOPMENT_TEAM = "";/DEVELOPMENT_TEAM = 62K3DY93D7;/g' Runner.xcodeproj/project.pbxproj
           sed -i '' 's/DEVELOPMENT_TEAM =.*;/DEVELOPMENT_TEAM = 62K3DY93D7;/g' Runner.xcodeproj/project.pbxproj
 
