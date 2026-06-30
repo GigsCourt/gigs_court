@@ -138,9 +138,20 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
       }
     } catch (e) {
       if (!mounted) return;
+      String errorMsg;
+      if (e is DioException && e.response != null) {
+        final responseData = e.response!.data;
+        if (responseData is Map) {
+          errorMsg = responseData['error']?.toString() ?? e.toString();
+        } else {
+          errorMsg = 'Status ${e.response!.statusCode}: ${e.toString()}';
+        }
+      } else {
+        errorMsg = e.toString();
+      }
       setState(() {
         _isUploading = false;
-        _errorMessage = 'Upload failed: ${e.toString()}';
+        _errorMessage = errorMsg;
       });
     }
   }
@@ -252,15 +263,18 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
                     borderRadius: BorderRadius.circular(12.r),
                   ),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(Icons.error_outline,
                           color: AppColors.error, size: 20.sp),
                       SizedBox(width: 8.w),
                       Expanded(
-                        child: Text(
-                          _errorMessage!,
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: AppColors.error,
+                        child: SingleChildScrollView(
+                          child: Text(
+                            _errorMessage!,
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.error,
+                            ),
                           ),
                         ),
                       ),
