@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../../config/theme.dart';
 import '../../config/app_config.dart';
+import '../../config/routes.dart';
 
 class ProfilePhotoScreen extends StatefulWidget {
   const ProfilePhotoScreen({super.key});
@@ -115,7 +116,7 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
         if (!mounted) return;
         setState(() => _isUploading = false);
         // Store imageUrl: response.data['url']
-        // Navigate to next setup screen — will be connected when built
+                Navigator.pushReplacementNamed(context, AppRoutes.location);
       } else {
         throw Exception('Upload failed');
       }

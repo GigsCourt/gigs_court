@@ -56,8 +56,7 @@ class _SplashScreenState extends State<SplashScreen>
         Navigator.pushReplacementNamed(context, AppRoutes.profilePhoto);
         break;
       case AuthStatus.authenticated:
-        // Navigate to home — will be connected when home is built
-        Navigator.pushReplacementNamed(context, AppRoutes.onboarding);
+        Navigator.pushReplacementNamed(context, AppRoutes.home);
         break;
       default:
         Navigator.pushReplacementNamed(context, AppRoutes.onboarding);
