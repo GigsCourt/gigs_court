@@ -19,11 +19,25 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build iOS IPA
-        run: flutter build ipa --no-codesign
+      - name: Set iOS deployment target and development team
+        run: |
+          cd ios
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 13.0/IPHONEOS_DEPLOYMENT_TARGET = 14.0/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/DEVELOPMENT_TEAM = "";/DEVELOPMENT_TEAM = 62K3DY93D7;/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/DEVELOPMENT_TEAM =.*;/DEVELOPMENT_TEAM = 62K3DY93D7;/g' Runner.xcodeproj/project.pbxproj
 
-      - name: Upload IPA artifact
+      - name: Build unsigned IPA
+        run: flutter build ios --release --no-codesign
+
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          cp -r build/ios/Release-iphoneos/Runner.app Payload/
+          zip -r GigsCourt.ipa Payload/
+          rm -rf Payload
+
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: unsigned-ipa
-          path: build/ios/ipa/*.ipa
+          name: GigsCourt-unsigned
+          path: GigsCourt.ipa
