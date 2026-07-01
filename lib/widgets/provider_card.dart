@@ -6,6 +6,7 @@ class ProviderCardData {
   final String id;
   final String name;
   final String profileImage;
+  final String? latestWorkPhoto;
   final List<String> services;
   final double rating;
   final int reviewCount;
@@ -21,6 +22,7 @@ class ProviderCardData {
     required this.id,
     required this.name,
     required this.profileImage,
+    this.latestWorkPhoto,
     required this.services,
     required this.rating,
     required this.reviewCount,
@@ -43,6 +45,7 @@ class ProviderCard extends StatelessWidget {
   final ProviderCardData provider;
   final bool isHorizontal;
   final VoidCallback? onTap;
+  static const Color _verifiedBlue = Color(0xFF2196F3);
 
   const ProviderCard({
     super.key,
@@ -70,16 +73,61 @@ class ProviderCard extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Not Available', style: AppTextStyles.bodyLarge),
-        content: Text(
-          'This provider is currently not accepting new clients.',
-          style: AppTextStyles.bodyMedium,
+        content: Text('This provider is currently not accepting new clients.', style: AppTextStyles.bodyMedium),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+      ),
+    );
+  }
+
+  Widget _buildPhotoSection({double? height}) {
+    final hasWorkPhoto = provider.latestWorkPhoto != null && provider.latestWorkPhoto!.isNotEmpty;
+    return ClipRRect(
+      borderRadius: isHorizontal
+          ? BorderRadius.horizontal(left: Radius.circular(16.r))
+          : BorderRadius.vertical(top: Radius.circular(16.r)),
+      child: Container(
+        height: height,
+        width: isHorizontal ? 110.w : double.infinity,
+        color: AppColors.primary.withValues(alpha: 0.06),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Work photo or fallback
+            if (hasWorkPhoto)
+              Image.network(provider.latestWorkPhoto!, fit: BoxFit.cover)
+            else if (provider.profileImage.isNotEmpty)
+              Image.network(provider.profileImage, fit: BoxFit.cover)
+            else
+              Icon(Icons.person, size: 36.sp, color: AppColors.primary.withValues(alpha: 0.3)),
+            // Profile photo circle top-left (only when work photo is shown)
+            if (hasWorkPhoto)
+              Positioned(
+                top: 8.h,
+                left: 8.w,
+                child: Container(
+                  width: 36.w,
+                  height: 36.w,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.white, width: 2),
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4.r)],
+                    image: provider.profileImage.isNotEmpty
+                        ? DecorationImage(image: NetworkImage(provider.profileImage), fit: BoxFit.cover)
+                        : null,
+                  ),
+                  child: provider.profileImage.isEmpty
+                      ? Icon(Icons.person, size: 20.sp, color: AppColors.primary.withValues(alpha: 0.5))
+                      : null,
+                ),
+              ),
+            // Lock overlay
+            if (provider.isLocked)
+              Container(
+                color: Colors.black.withValues(alpha: 0.4),
+                child: Center(child: Icon(Icons.lock_outline, color: AppColors.white, size: 32.sp)),
+              ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('OK'),
-          ),
-        ],
       ),
     );
   }
@@ -91,29 +139,11 @@ class ProviderCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(16.r),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.08),
-            blurRadius: 12.r,
-            offset: Offset(0, 4.h),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.08), blurRadius: 12.r, offset: Offset(0, 4.h))],
       ),
       child: Row(
         children: [
-          // Photo (40%)
-          ClipRRect(
-            borderRadius: BorderRadius.horizontal(left: Radius.circular(16.r)),
-            child: Container(
-              width: 110.w,
-              height: double.infinity,
-              color: AppColors.primary.withValues(alpha: 0.06),
-              child: provider.profileImage.isNotEmpty
-                  ? Image.network(provider.profileImage, fit: BoxFit.cover)
-                  : Icon(Icons.person, size: 36.sp, color: AppColors.primary.withValues(alpha: 0.3)),
-            ),
-          ),
-          // Details (60%)
+          _buildPhotoSection(height: double.infinity),
           Expanded(
             child: Padding(
               padding: EdgeInsets.all(12.w),
@@ -121,80 +151,24 @@ class ProviderCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Line 1: Name + Verified badge
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          provider.name,
-                          style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (provider.showVerifiedBadge) ...[
-                        SizedBox(width: 4.w),
-                        Icon(Icons.verified, size: 16.sp, color: AppColors.success),
-                      ],
-                      if (provider.isOwnProfile) ...[
-                        SizedBox(width: 4.w),
-                        Text('(You)', style: AppTextStyles.caption),
-                      ],
-                    ],
-                  ),
+                  Row(children: [
+                    Flexible(child: Text(provider.name, style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                    if (provider.showVerifiedBadge) ...[SizedBox(width: 4.w), Icon(Icons.verified, size: 16.sp, color: _verifiedBlue)],
+                    if (provider.isOwnProfile) ...[SizedBox(width: 4.w), Text('(You)', style: AppTextStyles.caption)],
+                  ]),
                   SizedBox(height: 4.h),
-                  // Line 2: Online status
                   if (provider.showOnlineStatus)
-                    Row(
-                      children: [
-                        Container(
-                          width: 7.w,
-                          height: 7.h,
-                          decoration: BoxDecoration(
-                            color: provider.isOnline ? AppColors.success : AppColors.grey,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        SizedBox(width: 4.w),
-                        Text(
-                          provider.isOnline ? 'Online now' : 'Last seen ${provider.lastSeen ?? "recently"}',
-                          style: AppTextStyles.caption.copyWith(
-                            color: provider.isOnline ? AppColors.success : AppColors.grey,
-                          ),
-                        ),
-                      ],
-                    ),
+                    Row(children: [
+                      Container(width: 7.w, height: 7.h, decoration: BoxDecoration(color: provider.isOnline ? AppColors.success : AppColors.grey, shape: BoxShape.circle)),
+                      SizedBox(width: 4.w),
+                      Text(provider.isOnline ? 'Online now' : 'Last seen ${provider.lastSeen ?? "recently"}', style: AppTextStyles.caption.copyWith(color: provider.isOnline ? AppColors.success : AppColors.grey)),
+                    ]),
                   SizedBox(height: 4.h),
-                  // Line 3: Services
-                  Text(
-                    provider.services.take(2).join(', '),
-                    style: AppTextStyles.caption,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  Text(provider.services.take(2).join(', '), style: AppTextStyles.caption, maxLines: 1, overflow: TextOverflow.ellipsis),
                   SizedBox(height: 4.h),
-                  // Line 4: Rating
-                  Row(
-                    children: [
-                      Icon(Icons.star, size: 14.sp, color: Colors.amber),
-                      SizedBox(width: 2.w),
-                      Text(
-                        '${provider.rating.toStringAsFixed(1)} (${provider.reviewCount})',
-                        style: AppTextStyles.caption,
-                      ),
-                    ],
-                  ),
+                  Row(children: [Icon(Icons.star, size: 14.sp, color: Colors.amber), SizedBox(width: 2.w), Text('${provider.rating.toStringAsFixed(1)} (${provider.reviewCount})', style: AppTextStyles.caption)]),
                   SizedBox(height: 4.h),
-                  // Line 5: Distance
-                  Row(
-                    children: [
-                      Icon(Icons.location_on_outlined, size: 14.sp, color: AppColors.primary.withValues(alpha: 0.5)),
-                      SizedBox(width: 2.w),
-                      Text(
-                        '${provider.distanceKm.toStringAsFixed(1)} km away',
-                        style: AppTextStyles.caption,
-                      ),
-                    ],
-                  ),
+                  Row(children: [Icon(Icons.location_on_outlined, size: 14.sp, color: AppColors.primary.withValues(alpha: 0.5)), SizedBox(width: 2.w), Text('${provider.distanceKm.toStringAsFixed(1)} km away', style: AppTextStyles.caption)]),
                 ],
               ),
             ),
@@ -214,127 +188,36 @@ class ProviderCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(16.r),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.08),
-            blurRadius: 12.r,
-            offset: Offset(0, 4.h),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.08), blurRadius: 12.r, offset: Offset(0, 4.h))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Photo with lock overlay
-          Stack(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16.r)),
-                child: Container(
-                  height: 120.h,
-                  width: double.infinity,
-                  color: AppColors.primary.withValues(alpha: 0.06),
-                  child: provider.profileImage.isNotEmpty
-                      ? Image.network(provider.profileImage, fit: BoxFit.cover)
-                      : Icon(Icons.person, size: 36.sp, color: AppColors.primary.withValues(alpha: 0.3)),
-                ),
-              ),
-              if (provider.isLocked)
-                Positioned.fill(
-                  child: Container(
-                    color: Colors.black.withValues(alpha: 0.4),
-                    child: Center(
-                      child: Icon(Icons.lock_outline, color: AppColors.white, size: 32.sp),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          // Details
+          _buildPhotoSection(height: 120.h),
           Padding(
             padding: EdgeInsets.all(10.w),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Name + Badge
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        provider.name,
-                        style: AppTextStyles.bodySmall.copyWith(
-                          fontWeight: FontWeight.w600,
-                          fontSize: nameSize.sp,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (provider.showVerifiedBadge) ...[
-                      SizedBox(width: 4.w),
-                      Icon(Icons.verified, size: 14.sp, color: AppColors.success),
-                    ],
-                    if (provider.isOwnProfile) ...[
-                      SizedBox(width: 2.w),
-                      Text('(You)', style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp)),
-                    ],
-                  ],
-                ),
+                Row(children: [
+                  Flexible(child: Text(provider.name, style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, fontSize: nameSize.sp), overflow: TextOverflow.ellipsis)),
+                  if (provider.showVerifiedBadge) ...[SizedBox(width: 4.w), Icon(Icons.verified, size: 14.sp, color: _verifiedBlue)],
+                  if (provider.isOwnProfile) ...[SizedBox(width: 2.w), Text('(You)', style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp))],
+                ]),
                 SizedBox(height: 3.h),
-                // Online
                 if (provider.showOnlineStatus)
-                  Row(
-                    children: [
-                      Container(
-                        width: 6.w,
-                        height: 6.h,
-                        decoration: BoxDecoration(
-                          color: provider.isOnline ? AppColors.success : AppColors.grey,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      SizedBox(width: 3.w),
-                      Text(
-                        provider.isOnline ? 'Online' : provider.lastSeen ?? '',
-                        style: AppTextStyles.caption.copyWith(
-                          fontSize: detailSize.sp,
-                          color: provider.isOnline ? AppColors.success : AppColors.grey,
-                        ),
-                      ),
-                    ],
-                  ),
+                  Row(children: [
+                    Container(width: 6.w, height: 6.h, decoration: BoxDecoration(color: provider.isOnline ? AppColors.success : AppColors.grey, shape: BoxShape.circle)),
+                    SizedBox(width: 3.w),
+                    Text(provider.isOnline ? 'Online' : provider.lastSeen ?? '', style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp, color: provider.isOnline ? AppColors.success : AppColors.grey)),
+                  ]),
                 SizedBox(height: 3.h),
-                // Services
-                Text(
-                  provider.services.take(2).join(', '),
-                  style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                Text(provider.services.take(2).join(', '), style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp), maxLines: 1, overflow: TextOverflow.ellipsis),
                 SizedBox(height: 3.h),
-                // Rating
-                Row(
-                  children: [
-                    Icon(Icons.star, size: 12.sp, color: Colors.amber),
-                    SizedBox(width: 2.w),
-                    Text(
-                      '${provider.rating.toStringAsFixed(1)} (${provider.reviewCount})',
-                      style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp),
-                    ),
-                  ],
-                ),
+                Row(children: [Icon(Icons.star, size: 12.sp, color: Colors.amber), SizedBox(width: 2.w), Text('${provider.rating.toStringAsFixed(1)} (${provider.reviewCount})', style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp))]),
                 SizedBox(height: 3.h),
-                // Distance
-                Row(
-                  children: [
-                    Icon(Icons.location_on_outlined, size: 12.sp, color: AppColors.primary.withValues(alpha: 0.5)),
-                    SizedBox(width: 2.w),
-                    Text(
-                      '${provider.distanceKm.toStringAsFixed(1)} km',
-                      style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp),
-                    ),
-                  ],
-                ),
+                Row(children: [Icon(Icons.location_on_outlined, size: 12.sp, color: AppColors.primary.withValues(alpha: 0.5)), SizedBox(width: 2.w), Text('${provider.distanceKm.toStringAsFixed(1)} km', style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp))]),
               ],
             ),
           ),

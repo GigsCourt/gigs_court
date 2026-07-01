@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
 
@@ -16,6 +17,7 @@ class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
+  bool _isEarlyAccess = false;
 
   @override
   void initState() {
@@ -29,10 +31,24 @@ class _SplashScreenState extends State<SplashScreen>
     );
     _controller.forward();
 
-    _navigateAfterSplash();
+    _loadConfigAndNavigate();
   }
 
-  Future<void> _navigateAfterSplash() async {
+  Future<void> _loadConfigAndNavigate() async {
+    try {
+      final configDoc = await FirebaseFirestore.instance
+          .collection('app_config')
+          .doc('global')
+          .get();
+      if (configDoc.exists) {
+        _isEarlyAccess = configDoc.data()?['earlyAccessEnabled'] ?? true;
+      }
+    } catch (_) {
+      _isEarlyAccess = true;
+    }
+
+    if (mounted) setState(() {});
+
     await Future.delayed(const Duration(milliseconds: 2500));
 
     if (!mounted) return;
@@ -96,6 +112,21 @@ class _SplashScreenState extends State<SplashScreen>
           ),
         ),
       ),
+      bottomSheet: _isEarlyAccess
+          ? Container(
+              width: double.infinity,
+              padding: EdgeInsets.symmetric(vertical: 12.h),
+              color: AppColors.success.withValues(alpha: 0.9),
+              child: Text(
+                'Early Access — Free for everyone',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            )
+          : null,
     );
   }
 }

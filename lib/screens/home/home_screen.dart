@@ -6,11 +6,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:firebase_remote_config/firebase_remote_config.dart';
+import 'package:provider/provider.dart';
 import '../../config/theme.dart';
 import '../../services/cache_service.dart';
 import '../../widgets/provider_card.dart';
 import '../../widgets/skeleton_loader.dart';
+import '../../providers/auth_provider.dart' as app_auth;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,22 +22,21 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _supabase = Supabase.instance.client;
-  final _remoteConfig = FirebaseRemoteConfig.instance;
   final _scrollController = ScrollController();
 
   List<ProviderCardData> _featuredProviders = [];
   List<ProviderCardData> _allProviders = [];
   bool _isLoading = true;
-  bool _isEarlyAccess = true;
-  bool _showScrollToTop = false;
+  bool _showScrollToBottom = false;
   double? _userLat;
   double? _userLng;
   StreamSubscription? _locationSubscription;
 
+  bool get _isEarlyAccess => context.read<app_auth.AuthProvider>().isEarlyAccess;
+
   @override
   void initState() {
     super.initState();
-    _isEarlyAccess = !_remoteConfig.getBool('subscriptions_enforced');
     _scrollController.addListener(_onScroll);
     _getLocationAndLoad();
   }
@@ -50,7 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onScroll() {
     if (_scrollController.hasClients) {
-      setState(() => _showScrollToTop = _scrollController.offset > 400);
+      setState(() => _showScrollToBottom = _scrollController.offset > 400);
     }
   }
 
@@ -163,10 +163,10 @@ class _HomeScreenState extends State<HomeScreen> {
           'reviewCount': userData['reviewCount'] ?? 0,
           'distanceKm': (supa['distance_meters'] as num) / 1000.0,
           'isOwnProfile': id == currentUserId,
+          'workPhotos': List<String>.from(userData['workPhotos'] ?? []),
         });
       }
 
-      // Fetch service names
       Map<int, String> serviceNames = CacheService.get<Map<int, String>>('service_names') ?? {};
       final uncachedIds = allServiceIds.where((id) => !serviceNames.containsKey(id)).toList();
       if (uncachedIds.isNotEmpty) {
@@ -177,27 +177,19 @@ class _HomeScreenState extends State<HomeScreen> {
         CacheService.set('service_names', serviceNames, ttl: const Duration(hours: 24));
       }
 
-      // Build final list
       final providers = providersRaw.map((p) {
         final names = (p['serviceIds'] as List<int>).map((id) => serviceNames[id] ?? '').where((n) => n.isNotEmpty).toList();
+        final workPhotos = List<String>.from(p['workPhotos'] ?? []);
         return ProviderCardData(
-          id: p['id'],
-          name: p['name'],
-          profileImage: p['profileImage'],
-          services: names,
-          rating: p['rating'],
-          reviewCount: p['reviewCount'],
-          distanceKm: p['distanceKm'],
-          isSubscribed: p['isSubscribed'],
-          isFree: p['isFree'],
-          isOnline: p['isOnline'],
-          lastSeen: p['lastSeen'],
-          isEarlyAccess: _isEarlyAccess,
-          isOwnProfile: p['isOwnProfile'],
+          id: p['id'], name: p['name'], profileImage: p['profileImage'],
+          latestWorkPhoto: workPhotos.isNotEmpty ? workPhotos.last : null,
+          services: names, rating: p['rating'], reviewCount: p['reviewCount'],
+          distanceKm: p['distanceKm'], isSubscribed: p['isSubscribed'],
+          isFree: p['isFree'], isOnline: p['isOnline'], lastSeen: p['lastSeen'],
+          isEarlyAccess: _isEarlyAccess, isOwnProfile: p['isOwnProfile'],
         );
       }).toList();
 
-      // Sort: Distance → Subscribed → Rating → Review count
       providers.sort((a, b) {
         final distCompare = a.distanceKm.compareTo(b.distanceKm);
         if (distCompare != 0) return distCompare;
@@ -266,67 +258,35 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (_featuredProviders.isNotEmpty) ...[
                         Text('Featured Providers', style: AppTextStyles.bodyLarge),
                         SizedBox(height: 12.h),
-                        SizedBox(
-                          height: 160.h,
-                          child: ListView.builder(
-                            scrollDirection: Axis.horizontal,
-                            itemCount: _featuredProviders.length,
-                            itemBuilder: (context, index) {
-                              final p = _featuredProviders[index];
-                              return ProviderCard(
-                                provider: p,
-                                isHorizontal: true,
-                                onTap: () => context.push('/provider/${p.id}'),
-                              );
-                            },
-                          ),
-                        ),
+                        SizedBox(height: 160.h, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: _featuredProviders.length, itemBuilder: (context, index) {
+                          final p = _featuredProviders[index];
+                          return ProviderCard(provider: p, isHorizontal: true, onTap: () => context.push('/provider/${p.id}'));
+                        })),
                         SizedBox(height: 24.h),
                       ],
                       Text('All Providers', style: AppTextStyles.bodyLarge),
                       SizedBox(height: 12.h),
                       if (_allProviders.isEmpty)
-                        Padding(
-                          padding: EdgeInsets.all(32.h),
-                          child: Center(
-                            child: Text(
-                              'No providers found nearby.',
-                              style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.5)),
-                            ),
-                          ),
-                        )
+                        Padding(padding: EdgeInsets.all(32.h), child: Center(child: Text('No providers found nearby.', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.5)))))
                       else
                         GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: crossAxisCount,
-                            childAspectRatio: 0.72,
-                            crossAxisSpacing: 12.w,
-                            mainAxisSpacing: 12.h,
-                          ),
+                          shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: crossAxisCount, childAspectRatio: 0.72, crossAxisSpacing: 12.w, mainAxisSpacing: 12.h),
                           itemCount: _allProviders.length,
                           itemBuilder: (context, index) {
                             final p = _allProviders[index];
-                            return ProviderCard(
-                              provider: p,
-                              onTap: () => context.push('/provider/${p.id}'),
-                            );
+                            return ProviderCard(provider: p, onTap: () => context.push('/provider/${p.id}'));
                           },
                         ),
                     ],
                   ),
                 ),
-          if (_showScrollToTop)
-            Positioned(
-              bottom: 20.h,
-              right: 20.w,
-              child: FloatingActionButton.small(
-                onPressed: () => _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut),
-                backgroundColor: AppColors.primary,
-                child: Icon(Icons.keyboard_arrow_up, color: AppColors.white),
-              ),
-            ),
+          if (_showScrollToBottom)
+            Positioned(bottom: 20.h, right: 20.w, child: FloatingActionButton.small(
+              onPressed: () => _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut),
+              backgroundColor: AppColors.primary,
+              child: Icon(Icons.keyboard_arrow_up, color: AppColors.white),
+            )),
         ],
       ),
     );
@@ -336,31 +296,11 @@ class _HomeScreenState extends State<HomeScreen> {
     return ListView(
       padding: EdgeInsets.all(16.w),
       children: [
-        const SkeletonLoader(width: 120, height: 18),
-        SizedBox(height: 12.h),
-        SizedBox(
-          height: 160.h,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: 3,
-            itemBuilder: (_, _) => const ProviderCardSkeleton(isHorizontal: true),
-          ),
-        ),
+        const SkeletonLoader(width: 120, height: 18), SizedBox(height: 12.h),
+        SizedBox(height: 160.h, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: 3, itemBuilder: (_, _) => const ProviderCardSkeleton(isHorizontal: true))),
         SizedBox(height: 24.h),
-        const SkeletonLoader(width: 100, height: 18),
-        SizedBox(height: 12.h),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            childAspectRatio: 0.72,
-            crossAxisSpacing: 12.w,
-            mainAxisSpacing: 12.h,
-          ),
-          itemCount: 6,
-          itemBuilder: (_, _) => const ProviderCardSkeleton(),
-        ),
+        const SkeletonLoader(width: 100, height: 18), SizedBox(height: 12.h),
+        GridView.builder(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: crossAxisCount, childAspectRatio: 0.72, crossAxisSpacing: 12.w, mainAxisSpacing: 12.h), itemCount: 6, itemBuilder: (_, _) => const ProviderCardSkeleton()),
       ],
     );
   }

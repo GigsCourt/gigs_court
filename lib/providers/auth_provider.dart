@@ -13,12 +13,19 @@ class AuthProvider extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   AuthStatus _status = AuthStatus.unknown;
   User? _user;
+  bool _isEarlyAccess = true;
 
   AuthStatus get status => _status;
   User? get user => _user;
+  bool get isEarlyAccess => _isEarlyAccess;
 
   AuthProvider() {
     _auth.authStateChanges().listen(_onAuthStateChanged);
+  }
+
+  void setEarlyAccess(bool value) {
+    _isEarlyAccess = value;
+    notifyListeners();
   }
 
   void _onAuthStateChanged(User? user) {
@@ -37,7 +44,6 @@ class AuthProvider extends ChangeNotifier {
       return;
     }
 
-    // Check if setup is complete — will be updated when we store user data in Firestore
     _status = AuthStatus.setupIncomplete;
     notifyListeners();
   }
