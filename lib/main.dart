@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'config/router.dart';
 import 'config/theme.dart';
 import 'providers/auth_provider.dart' as app_auth;
@@ -31,7 +32,56 @@ void main() async {
   await remoteConfig.setDefaults({'subscriptions_enforced': false});
   await remoteConfig.fetchAndActivate();
 
+  await _initFCM();
+
   runApp(const GigsCourtApp());
+}
+
+Future<void> _initFCM() async {
+  final messaging = FirebaseMessaging.instance;
+  await messaging.requestPermission(alert: true, badge: true, sound: true);
+
+  final token = await messaging.getToken();
+  if (token != null) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'fcmToken': token,
+      }, SetOptions(merge: true));
+    }
+    messaging.onTokenRefresh.listen((newToken) async {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'fcmToken': newToken,
+        }, SetOptions(merge: true));
+      }
+    });
+  }
+
+  FirebaseMessaging.onMessageOpenedApp.listen((message) {
+    _handleNotificationTap(message.data);
+  });
+
+  final initialMessage = await messaging.getInitialMessage();
+  if (initialMessage != null) {
+    _handleNotificationTap(initialMessage.data);
+  }
+}
+
+void _handleNotificationTap(Map<String, dynamic> data) {
+  final type = data['type'];
+  switch (type) {
+    case 'message':
+      appRouter.go('/home');
+      break;
+    case 'subscription_expired':
+    case 'subscription_expiring':
+      appRouter.go('/subscription');
+      break;
+    default:
+      appRouter.go('/home');
+  }
 }
 
 class GigsCourtApp extends StatefulWidget {
