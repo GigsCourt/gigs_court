@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/theme.dart';
 import '../../services/imagekit_service.dart';
 
@@ -20,6 +22,7 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
   bool _isUploading = false;
   double _uploadProgress = 0;
   String? _errorMessage;
+  String? _uploadedImageUrl;
   final ImagePicker _picker = ImagePicker();
   final TextEditingController _bioController = TextEditingController();
 
@@ -31,9 +34,7 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
 
   void _clearError() {
     if (_errorMessage != null) {
-      setState(() {
-        _errorMessage = null;
-      });
+      setState(() => _errorMessage = null);
     }
   }
 
@@ -65,9 +66,16 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
   }
 
   Future<void> _handleContinue() async {
-    if (!_hasImage) return;
+    if (!_hasImage && _uploadedImageUrl == null) return;
 
     _clearError();
+
+    // If already uploaded, just proceed
+    if (_uploadedImageUrl != null) {
+      context.push('/setup/location');
+      return;
+    }
+
     setState(() {
       _isUploading = true;
       _uploadProgress = 0;
@@ -80,11 +88,38 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
     setState(() => _isUploading = false);
 
     if (result['success'] == true) {
+      final imageUrl = result['url'] as String;
+      _uploadedImageUrl = imageUrl;
+
+      // Save to Firestore
+      try {
+        final user = FirebaseAuth.instance.currentUser;
+        if (user != null) {
+          await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+            'name': user.displayName ?? '',
+            'email': user.email ?? '',
+            'profileImage': imageUrl,
+            'bio': _bioController.text.trim(),
+            'isProvider': false,
+            'isSubscribed': false,
+            'leadCount': 0,
+            'reviewCount': 0,
+            'rating': 0.0,
+            'services': [],
+            'isOnline': false,
+            'lastSeen': FieldValue.serverTimestamp(),
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        }
+      } catch (e) {
+        // Still navigate even if Firestore save fails
+      }
+
+      if (!mounted) return;
       context.push('/setup/location');
     } else {
-      setState(() {
-        _errorMessage = result['error'] ?? 'Upload failed';
-      });
+      setState(() => _errorMessage = result['error'] ?? 'Upload failed');
     }
   }
 
@@ -106,22 +141,15 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
             child: Column(
               children: [
                 SizedBox(height: 20.h),
-                Text(
-                  'Add Your Profile Photo',
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.headline2,
-                ),
+                Text('Add Your Profile Photo', textAlign: TextAlign.center, style: AppTextStyles.headline2),
                 SizedBox(height: 8.h),
                 Text(
                   'Upload a clear photo of yourself. This helps providers and clients recognize you.',
                   textAlign: TextAlign.center,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.primary.withValues(alpha: 0.6),
-                  ),
+                  style: AppTextStyles.bodySmall.copyWith(color: AppColors.primary.withValues(alpha: 0.6)),
                 ),
                 SizedBox(height: 32.h),
 
-                // Photo preview
                 GestureDetector(
                   onTap: _isUploading ? null : _pickImage,
                   child: Container(
@@ -131,51 +159,33 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
                       color: AppColors.primary.withValues(alpha: 0.06),
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: _hasImage
-                            ? AppColors.primary
-                            : AppColors.primary.withValues(alpha: 0.2),
+                        color: _hasImage ? AppColors.primary : AppColors.primary.withValues(alpha: 0.2),
                         width: 2,
                       ),
                     ),
                     child: _hasImage
                         ? ClipOval(
                             child: _selectedImageBytes != null
-                                ? Image.memory(
-                                    _selectedImageBytes!,
-                                    fit: BoxFit.cover,
-                                  )
-                                : Image.file(
-                                    _selectedImageFile!,
-                                    fit: BoxFit.cover,
-                                  ),
+                                ? Image.memory(_selectedImageBytes!, fit: BoxFit.cover)
+                                : Image.file(_selectedImageFile!, fit: BoxFit.cover),
                           )
                         : Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
-                                Icons.camera_alt_outlined,
-                                size: 36.sp,
-                                color: AppColors.primary.withValues(alpha: 0.4),
-                              ),
+                              Icon(Icons.camera_alt_outlined, size: 36.sp, color: AppColors.primary.withValues(alpha: 0.4)),
                               SizedBox(height: 6.h),
-                              Text(
-                                'Tap to upload',
-                                style: AppTextStyles.caption,
-                              ),
+                              Text('Tap to upload', style: AppTextStyles.caption),
                             ],
                           ),
                   ),
                 ),
                 SizedBox(height: 12.h),
-
-                // Hint text directly below photo
                 Text(
                   _hasImage ? 'Tap the photo to change it' : 'A clear headshot works best',
                   style: AppTextStyles.caption,
                 ),
                 SizedBox(height: 20.h),
 
-                // Upload progress
                 if (_isUploading) ...[
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8.r),
@@ -191,7 +201,6 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
                   SizedBox(height: 16.h),
                 ],
 
-                // Error message
                 if (_errorMessage != null) ...[
                   Container(
                     padding: EdgeInsets.all(12.w),
@@ -206,10 +215,7 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
                         SizedBox(width: 8.w),
                         Expanded(
                           child: SingleChildScrollView(
-                            child: Text(
-                              _errorMessage!,
-                              style: AppTextStyles.bodySmall.copyWith(color: AppColors.error),
-                            ),
+                            child: Text(_errorMessage!, style: AppTextStyles.bodySmall.copyWith(color: AppColors.error)),
                           ),
                         ),
                       ],
@@ -218,7 +224,6 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
                   SizedBox(height: 16.h),
                 ],
 
-                // Bio field
                 Text('Bio (optional)', style: AppTextStyles.label),
                 SizedBox(height: 8.h),
                 TextField(
@@ -228,30 +233,20 @@ class _ProfilePhotoScreenState extends State<ProfilePhotoScreen> {
                   style: AppTextStyles.bodyMedium,
                   decoration: InputDecoration(
                     hintText: 'Tell clients about yourself and your services...',
-                    hintStyle: AppTextStyles.bodyMedium.copyWith(
-                      color: AppColors.primary.withValues(alpha: 0.3),
-                    ),
+                    hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.3)),
                   ),
                 ),
                 SizedBox(height: 4.h),
                 Text('This will appear on your profile.', style: AppTextStyles.caption),
                 SizedBox(height: 32.h),
 
-                // Continue button
                 SizedBox(
                   width: double.infinity,
                   height: 56.h,
                   child: ElevatedButton(
                     onPressed: (_hasImage && !_isUploading) ? _handleContinue : null,
                     child: _isUploading
-                        ? SizedBox(
-                            height: 22.h,
-                            width: 22.w,
-                            child: const CircularProgressIndicator(
-                              color: AppColors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
+                        ? SizedBox(height: 22.h, width: 22.w, child: const CircularProgressIndicator(color: AppColors.white, strokeWidth: 2))
                         : Text('Continue', style: AppTextStyles.button),
                   ),
                 ),

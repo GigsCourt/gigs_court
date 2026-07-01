@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../screens/splash/splash_screen.dart';
 import '../screens/onboarding/onboarding_screen.dart';
@@ -6,7 +7,7 @@ import '../screens/verify_email/verify_email_screen.dart';
 import '../screens/setup/profile_photo_screen.dart';
 import '../screens/setup/location_screen.dart';
 import '../screens/setup/services_screen.dart';
-import '../screens/home/home_screen.dart';
+import '../screens/shell/main_shell.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/',
@@ -44,7 +45,29 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/home',
-      builder: (context, state) => const HomeScreen(),
+      builder: (context, state) => const MainShell(),
+    ),
+    GoRoute(
+      path: '/notifications',
+      builder: (context, state) => const _PlaceholderScreen(title: 'Notifications'),
+    ),
+    GoRoute(
+      path: '/provider/:id',
+      builder: (context, state) => const _PlaceholderScreen(title: 'Provider Profile'),
     ),
   ],
 );
+
+class _PlaceholderScreen extends StatelessWidget {
+  final String title;
+  const _PlaceholderScreen({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(title: Text(title)),
+      body: Center(child: Text('$title - Coming Soon')),
+    );
+  }
+}
