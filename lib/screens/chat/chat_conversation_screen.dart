@@ -399,7 +399,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   }
 
   Widget _buildReplyPreview(String replyToId) {
-    return FutureBuilder<DocumentSnapshot>(
+    return FutureBuilder<DocumentSnapshot?>(
       future: FirebaseFirestore.instance
           .collection('chats')
           .doc(widget.chatId)
