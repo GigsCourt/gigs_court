@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum AuthStatus {
   unknown,
@@ -11,6 +12,7 @@ enum AuthStatus {
 
 class AuthProvider extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   AuthStatus _status = AuthStatus.unknown;
   User? _user;
   bool _isEarlyAccess = true;
@@ -28,7 +30,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _onAuthStateChanged(User? user) {
+  Future<void> _onAuthStateChanged(User? user) async {
     if (user == null) {
       _user = null;
       _status = AuthStatus.unauthenticated;
@@ -44,20 +46,54 @@ class AuthProvider extends ChangeNotifier {
       return;
     }
 
+    // Check Firestore if setup is already completed
+    try {
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      if (doc.exists && doc.data()?['setupComplete'] == true) {
+        _status = AuthStatus.authenticated;
+        notifyListeners();
+        return;
+      }
+    } catch (_) {
+      // If Firestore check fails, default to setupIncomplete
+    }
+
     _status = AuthStatus.setupIncomplete;
     notifyListeners();
   }
 
-  void setSetupComplete() {
+  Future<void> setSetupComplete() async {
     _status = AuthStatus.authenticated;
     notifyListeners();
+
+    // Save to Firestore so it survives app restarts
+    try {
+      await _firestore.collection('users').doc(_user?.uid).set({
+        'setupComplete': true,
+      }, SetOptions(merge: true));
+    } catch (_) {
+      // Silently fail — status is already set in memory
+    }
   }
 
   Future<void> refreshUser() async {
     await _auth.currentUser?.reload();
     _user = _auth.currentUser;
-    if (_user != null && _user!.emailVerified && _status == AuthStatus.emailNotVerified) {
-      _status = AuthStatus.setupIncomplete;
+    if (_user != null &&
+        _user!.emailVerified &&
+        _status == AuthStatus.emailNotVerified) {
+      // Re-check Firestore on refresh
+      try {
+        final doc =
+            await _firestore.collection('users').doc(_user!.uid).get();
+        if (doc.exists && doc.data()?['setupComplete'] == true) {
+          _status = AuthStatus.authenticated;
+        } else {
+          _status = AuthStatus.setupIncomplete;
+        }
+      } catch (_) {
+        _status = AuthStatus.setupIncomplete;
+      }
       notifyListeners();
     }
   }
