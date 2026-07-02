@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/theme.dart';
+import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart' as app_auth;
 
 class ServicesScreen extends StatefulWidget {
   const ServicesScreen({super.key});
@@ -153,12 +155,21 @@ class _ServicesScreenState extends State<ServicesScreen> {
       if (user != null && _selectedServiceNames.isNotEmpty) {
         await FirebaseFirestore.instance.collection('users').doc(user.uid).update({'services': _selectedServiceIds.map((id) => int.parse(id)).toList(), 'isProvider': true});
         for (final serviceId in _selectedServiceIds) {
-          try { await _supabase.rpc('add_user_service', params: {'p_user_id': user.uid, 'p_service_id': int.parse(serviceId)}); } catch (_) {}
+          try {
+            await _supabase.rpc('add_user_service', params: {'p_user_id': user.uid, 'p_service_id': int.parse(serviceId)});
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Service save error: $e'), backgroundColor: AppColors.error),
+              );
+            }
+          }
         }
       }
     } catch (_) {}
     if (!mounted) return;
     setState(() => _isSaving = false);
+    context.read<app_auth.AuthProvider>().setSetupComplete();
     context.go('/home');
   }
 
@@ -188,7 +199,10 @@ class _ServicesScreenState extends State<ServicesScreen> {
             Padding(padding: EdgeInsets.fromLTRB(24.w, 12.h, 24.w, 32.h), child: Column(children: [
               SizedBox(width: double.infinity, height: 48.h, child: ElevatedButton(onPressed: (_selectedServiceIds.isNotEmpty && !_isSaving) ? _handleContinue : null, child: _isSaving ? SizedBox(height: 20.h, width: 20.w, child: const CircularProgressIndicator(color: AppColors.white, strokeWidth: 2)) : Text('Continue', style: AppTextStyles.button))),
               SizedBox(height: 6.h),
-              GestureDetector(onTap: () => context.go('/home'), child: Text('Skip for now', style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: AppColors.primary))),
+              GestureDetector(onTap: () {
+                context.read<app_auth.AuthProvider>().setSetupComplete();
+                context.go('/home');
+              }, child: Text('Skip for now', style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: AppColors.primary))),
             ])),
           ]),
         ),

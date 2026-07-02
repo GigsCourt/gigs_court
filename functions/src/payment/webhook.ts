@@ -35,7 +35,7 @@ export const paystackWebhook = functions
           subscriptionStatus: "premium",
         });
 
-                await admin.firestore().collection("app_config").doc("global").set({
+        await admin.firestore().collection("app_config").doc("global").set({
           totalSubscribers: admin.firestore.FieldValue.increment(1),
         }, {merge: true});
 

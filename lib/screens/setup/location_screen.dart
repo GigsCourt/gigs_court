@@ -113,7 +113,13 @@ class _LocationScreenState extends State<LocationScreen> {
           'p_user_id': user.uid, 'p_latitude': _pinnedLocation.latitude, 'p_longitude': _pinnedLocation.longitude, 'p_address': _address.trim(),
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save location: $e'), backgroundColor: AppColors.error),
+        );
+      }
+    }
     if (!mounted) return;
     setState(() => _isSaving = false);
     context.push('/setup/services');
