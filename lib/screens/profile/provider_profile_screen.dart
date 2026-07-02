@@ -102,7 +102,10 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
     String? existingChatId;
     for (final doc in existingChat.docs) {
       final participants = List<String>.from(doc.data()['participants'] ?? []);
-      if (participants.contains(widget.providerId)) { existingChatId = doc.id; break; }
+      if (participants.contains(widget.providerId)) {
+        existingChatId = doc.id;
+        break;
+      }
     }
     if (existingChatId != null) {
       if (mounted) context.push('/chat/$existingChatId', extra: {'otherUserId': widget.providerId, 'otherUserName': _userData?['displayName'] ?? _userData?['name'] ?? 'Unknown'});
