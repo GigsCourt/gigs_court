@@ -45,7 +45,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _nameController.text = userData['displayName'] ?? userData['name'] ?? '';
       _bioController.text = userData['bio'] ?? '';
 
-      final serviceIds = List<int>.from(userData['services'] ?? []);
+      final serviceIds = List<String>.from(userData['services'] ?? []);
       if (serviceIds.isNotEmpty) {
         try {
           final namesData = await _supabase.rpc('get_service_names', params: {'p_service_ids': serviceIds});
@@ -84,12 +84,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         'name': _nameController.text.trim(),
         'bio': _bioController.text.trim(),
         'profileImage': photoUrl,
-        'services': _selectedServiceIds.map((id) => int.parse(id)).toList(),
+        'services': _selectedServiceIds.toList(),
       });
 
       if (_selectedServiceIds.isNotEmpty) {
         for (final id in _selectedServiceIds) {
-          try { await _supabase.rpc('add_user_service', params: {'p_user_id': user.uid, 'p_service_id': int.parse(id)}); } catch (_) {}
+          try { await _supabase.rpc('add_user_service', params: {'p_user_id': user.uid, 'p_service_id': id}); } catch (_) {}
         }
       }
 

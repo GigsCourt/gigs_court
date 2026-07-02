@@ -109,7 +109,7 @@ class _SearchScreenState extends State<SearchScreen> {
       final currentUserId = FirebaseAuth.instance.currentUser?.uid;
       final userFutures = nearbyUsers.map((supa) => FirebaseFirestore.instance.collection('users').doc(supa['provider_id'] as String).get()).toList();
       final userDocs = await Future.wait(userFutures);
-      final allServiceIds = <int>{};
+      final allServiceIds = <String>{};
       final providersRaw = <Map<String, dynamic>>[];
 
       for (int i = 0; i < nearbyUsers.length; i++) {
@@ -118,7 +118,7 @@ class _SearchScreenState extends State<SearchScreen> {
         if (!userDoc.exists) continue;
         final id = supa['provider_id'] as String;
         final userData = userDoc.data()!;
-        final serviceIds = List<int>.from(userData['services'] ?? []);
+        final serviceIds = List<String>.from(userData['services'] ?? []);
         allServiceIds.addAll(serviceIds);
         final isSubscribed = userData['isSubscribed'] == true;
         final leadCount = userData['leadCount'] ?? 0;
@@ -142,22 +142,22 @@ class _SearchScreenState extends State<SearchScreen> {
 
       final serviceMatch = await _supabase.from('services').select().eq('name', _selectedService!).maybeSingle();
 
-      Map<int, String> serviceNames = CacheService.get<Map<int, String>>('service_names') ?? {};
+      Map<String, String> serviceNames = CacheService.get<Map<String, String>>('service_names') ?? {};
       final uncachedIds = allServiceIds.where((id) => !serviceNames.containsKey(id)).toList();
       if (uncachedIds.isNotEmpty) {
         final namesData = await _supabase.rpc('get_service_names', params: {'p_service_ids': uncachedIds});
-        for (final row in List<Map<String, dynamic>>.from(namesData)) { serviceNames[row['id'] as int] = row['name'] as String; }
+        for (final row in List<Map<String, dynamic>>.from(namesData)) { serviceNames[row['id'] as String] = row['name'] as String; }
         CacheService.set('service_names', serviceNames, ttl: const Duration(hours: 24));
       }
 
       var filtered = providersRaw;
       if (serviceMatch != null) {
-        final matchId = serviceMatch['id'] as int;
-        filtered = providersRaw.where((p) => (p['serviceIds'] as List<int>).contains(matchId)).toList();
+        final matchId = serviceMatch['id'] as String;
+        filtered = providersRaw.where((p) => (p['serviceIds'] as List<String>).contains(matchId)).toList();
       }
 
       final providers = filtered.map((p) {
-        final names = (p['serviceIds'] as List<int>).map((id) => serviceNames[id] ?? '').where((n) => n.isNotEmpty).toList();
+        final names = (p['serviceIds'] as List<String>).map((id) => serviceNames[id] ?? '').where((n) => n.isNotEmpty).toList();
         final workPhotos = List<String>.from(p['workPhotos'] ?? []);
         return ProviderCardData(
           id: p['id'], name: p['name'], profileImage: p['profileImage'], services: names,

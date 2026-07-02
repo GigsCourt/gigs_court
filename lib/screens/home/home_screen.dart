@@ -111,7 +111,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return FirebaseFirestore.instance.collection('users').doc(supa['provider_id'] as String).get();
       }).toList();
       final userDocs = await Future.wait(userFutures);
-      final allServiceIds = <int>{};
+      final allServiceIds = <String>{};
       final providersRaw = <Map<String, dynamic>>[];
 
       for (int i = 0; i < nearbyUsers.length; i++) {
@@ -120,7 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (!userDoc.exists) continue;
         final id = supa['provider_id'] as String;
         final userData = userDoc.data()!;
-        final serviceIds = List<int>.from(userData['services'] ?? []);
+        final serviceIds = List<String>.from(userData['services'] ?? []);
         allServiceIds.addAll(serviceIds);
 
         final isSubscribed = userData['isSubscribed'] == true;
@@ -145,18 +145,18 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
 
-      Map<int, String> serviceNames = CacheService.get<Map<int, String>>('service_names') ?? {};
+      Map<String, String> serviceNames = CacheService.get<Map<String, String>>('service_names') ?? {};
       final uncachedIds = allServiceIds.where((id) => !serviceNames.containsKey(id)).toList();
       if (uncachedIds.isNotEmpty) {
         final namesData = await _supabase.rpc('get_service_names', params: {'p_service_ids': uncachedIds});
         for (final row in List<Map<String, dynamic>>.from(namesData)) {
-          serviceNames[row['id'] as int] = row['name'] as String;
+          serviceNames[row['id'] as String] = row['name'] as String;
         }
         CacheService.set('service_names', serviceNames, ttl: const Duration(hours: 24));
       }
 
       final providers = providersRaw.map((p) {
-        final names = (p['serviceIds'] as List<int>).map((id) => serviceNames[id] ?? '').where((n) => n.isNotEmpty).toList();
+        final names = (p['serviceIds'] as List<String>).map((id) => serviceNames[id] ?? '').where((n) => n.isNotEmpty).toList();
         final workPhotos = List<String>.from(p['workPhotos'] ?? []);
         return ProviderCardData(
           id: p['id'], name: p['name'], profileImage: p['profileImage'],

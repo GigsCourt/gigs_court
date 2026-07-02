@@ -39,7 +39,7 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       if (!userDoc.exists) { setState(() => _isLoading = false); return; }
       final userData = userDoc.data()!;
-      final serviceIds = List<int>.from(userData['services'] ?? []);
+      final serviceIds = List<String>.from(userData['services'] ?? []);
       List<Map<String, dynamic>> services = [];
       if (serviceIds.isNotEmpty) {
         try {

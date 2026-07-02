@@ -153,10 +153,10 @@ class _ServicesScreenState extends State<ServicesScreen> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null && _selectedServiceNames.isNotEmpty) {
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).update({'services': _selectedServiceIds.map((id) => int.parse(id)).toList(), 'isProvider': true});
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).update({'services': _selectedServiceIds.toList(), 'isProvider': true});
         for (final serviceId in _selectedServiceIds) {
           try {
-            await _supabase.rpc('add_user_service', params: {'p_user_id': user.uid, 'p_service_id': int.parse(serviceId)});
+            await _supabase.rpc('add_user_service', params: {'p_user_id': user.uid, 'p_service_id': serviceId});
           } catch (e) {
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
