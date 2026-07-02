@@ -82,8 +82,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   void _listenToTyping() {
     _messageController.addListener(() {
-      if (_messageController.text.isNotEmpty && !_isTyping) _setTyping(true);
-      else if (_messageController.text.isEmpty && _isTyping) _setTyping(false);
+      if (_messageController.text.isNotEmpty && !_isTyping) {
+        _setTyping(true);
+      } else if (_messageController.text.isEmpty && _isTyping) {
+        _setTyping(false);
+      }
     });
   }
 
@@ -103,7 +106,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   void _listenToOnlineStatus() {
     FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).snapshots().listen((doc) {
-      if (doc.exists && mounted) setState(() { _isOtherOnline = doc.data()?['isOnline'] ?? false; _isOtherSubscribed = doc.data()?['isSubscribed'] == true; });
+      if (doc.exists && mounted) {
+        setState(() {
+          _isOtherOnline = doc.data()?['isOnline'] ?? false;
+          _isOtherSubscribed = doc.data()?['isSubscribed'] == true;
+        });
+      }
     });
   }
 
@@ -128,8 +136,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       'unreadCount.${widget.otherUserId}': FieldValue.increment(1),
     });
 
-    if (text != null) { _messageController.clear(); _setTyping(false); }
-        // Create notification for receiver
+    if (text != null) {
+      _messageController.clear();
+      _setTyping(false);
+    }
+    // Create notification for receiver
     final displayName = _currentUser!.displayName ?? 'Someone';
     final preview = lastMessage.length > 80 ? '${lastMessage.substring(0, 80)}...' : lastMessage;
     await FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).collection('notifications').add({
@@ -139,7 +150,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       'read': false,
       'data': {
         'chatId': widget.chatId,
-        'otherUserId': _currentUser!.uid,
+        'otherUserId': _currentUser.uid,
         'otherUserName': displayName,
       },
       'createdAt': FieldValue.serverTimestamp(),
@@ -259,9 +270,23 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   Future<void> _loadMoreMessages() async {
     if (_isLoadingMore || !_hasMoreMessages || _lastDocument == null) return;
     setState(() => _isLoadingMore = true);
-    final snapshot = await FirebaseFirestore.instance.collection('chats').doc(widget.chatId).collection('messages').orderBy('createdAt', descending: true).startAfterDocument(_lastDocument!).limit(30).get();
-    if (snapshot.docs.isEmpty) { setState(() { _hasMoreMessages = false; _isLoadingMore = false; }); }
-    else { _lastDocument = snapshot.docs.last; setState(() => _isLoadingMore = false); }
+    final snapshot = await FirebaseFirestore.instance
+        .collection('chats')
+        .doc(widget.chatId)
+        .collection('messages')
+        .orderBy('createdAt', descending: true)
+        .startAfterDocument(_lastDocument)
+        .limit(30)
+        .get();
+    if (snapshot.docs.isEmpty) {
+      setState(() {
+        _hasMoreMessages = false;
+        _isLoadingMore = false;
+      });
+    } else {
+      _lastDocument = snapshot.docs.last;
+      setState(() => _isLoadingMore = false);
+    }
   }
 
   Future<void> _showReviewDialog() async {
