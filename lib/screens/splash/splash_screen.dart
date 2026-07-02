@@ -37,6 +37,10 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _loadConfigAndNavigate() async {
+    // Start minimum splash timer immediately so animation always plays
+    final minSplashTime =
+        Future.delayed(const Duration(milliseconds: 2500));
+
     // Fetch early access config
     try {
       final configDoc = await FirebaseFirestore.instance
@@ -66,6 +70,11 @@ class _SplashScreenState extends State<SplashScreen>
       }
       await Future.delayed(const Duration(milliseconds: 200));
     }
+
+    if (!mounted) return;
+
+    // Wait for minimum splash time to finish before navigating
+    await minSplashTime;
 
     if (!mounted) return;
 
