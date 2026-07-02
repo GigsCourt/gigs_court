@@ -141,7 +141,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       _setTyping(false);
     }
     // Create notification for receiver
-    final displayName = _currentUser!.displayName ?? 'Someone';
+    final displayName = _currentUser.displayName ?? 'Someone';
     final preview = lastMessage.length > 80 ? '${lastMessage.substring(0, 80)}...' : lastMessage;
     await FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).collection('notifications').add({
       'type': 'message',
@@ -399,13 +399,42 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   }
 
   Widget _buildReplyPreview(String replyToId) {
-    return FutureBuilder<DocumentSnapshot>(future: FirebaseFirestore.instance.collection('chats').doc(widget.chatId).collection('messages').doc(replyToId).get(), builder: (context, snap) {
-      if (!snap.hasData || !snap.data!.exists) return const SizedBox.shrink();
-      final data = snap.data!.data() as Map<String, dynamic>;
-      final replyType = data['type'] ?? 'text';
-      final replyText = replyType == 'image' ? '📷 Photo' : replyType == 'voice' ? '🎤 Voice note' : (data['text'] ?? '');
-      return Container(margin: EdgeInsets.only(bottom: 4.h), padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h), decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(8.r), border: Border(left: BorderSide(color: AppColors.primary, width: 3.w))), child: Text(replyText, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.caption));
-    });
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('chats')
+          .doc(widget.chatId)
+          .collection('messages')
+          .doc(replyToId)
+          .get(),
+      builder: (context, snap) {
+        final doc = snap.data;
+        if (doc == null || !doc.exists) return const SizedBox.shrink();
+        final data = doc.data() as Map<String, dynamic>;
+        final replyType = data['type'] ?? 'text';
+        final replyText = replyType == 'image'
+            ? '📷 Photo'
+            : replyType == 'voice'
+                ? '🎤 Voice note'
+                : (data['text'] ?? '');
+        return Container(
+          margin: EdgeInsets.only(bottom: 4.h),
+          padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(8.r),
+            border: Border(
+              left: BorderSide(color: AppColors.primary, width: 3.w),
+            ),
+          ),
+          child: Text(
+            replyText,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.caption,
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildMessageBubble(String type, String text, String? imageUrl, String? voiceUrl, int? voiceDuration, bool isMine) {
