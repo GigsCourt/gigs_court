@@ -8,7 +8,6 @@ import '../../config/theme.dart';
 
 class ServicesScreen extends StatefulWidget {
   const ServicesScreen({super.key});
-
   @override
   State<ServicesScreen> createState() => _ServicesScreenState();
 }
@@ -42,16 +41,11 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
   Future<void> _loadServices() async {
     try {
-      final response = await _supabase.from('services').select().eq('status', 'approved').order('name');
+      final response = await _supabase.from('services').select().eq('status', 'approved').order('name', ascending: true);
       final services = List<Map<String, dynamic>>.from(response);
       final categories = services.map((s) => s['category'] as String).toSet().toList()..sort();
       if (mounted) {
-        setState(() {
-          _allServices = services;
-          _filteredServices = services;
-          _categories = categories;
-          _isLoading = false;
-        });
+        setState(() { _allServices = services; _filteredServices = services; _categories = categories; _isLoading = false; });
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
@@ -59,10 +53,7 @@ class _ServicesScreenState extends State<ServicesScreen> {
   }
 
   void _onSearchChanged(String query) {
-    if (query.trim().isEmpty) {
-      setState(() { _isSearching = false; _searchResults = []; });
-      return;
-    }
+    if (query.trim().isEmpty) { setState(() { _isSearching = false; _searchResults = []; }); return; }
     setState(() => _isSearching = true);
     final lowerQuery = query.trim().toLowerCase();
     final results = _allServices.where((s) => (s['name'] as String).toLowerCase().contains(lowerQuery)).toList();
@@ -81,13 +72,8 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
   void _toggleService(String id, String name) {
     setState(() {
-      if (_selectedServiceIds.contains(id)) {
-        _selectedServiceIds.remove(id);
-        _selectedServiceNames.remove(name);
-      } else {
-        _selectedServiceIds.add(id);
-        _selectedServiceNames.add(name);
-      }
+      if (_selectedServiceIds.contains(id)) { _selectedServiceIds.remove(id); _selectedServiceNames.remove(name); }
+      else { _selectedServiceIds.add(id); _selectedServiceNames.add(name); }
     });
   }
 
@@ -95,51 +81,82 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
   Future<void> _submitCustomService(String serviceName) async {
     try {
+      final similar = await _supabase
+          .from('services')
+          .select()
+          .eq('status', 'approved')
+          .ilike('name', '%$serviceName%')
+          .limit(5);
+      if (similar.isNotEmpty) {
+        final suggestions = List<Map<String, dynamic>>.from(similar);
+        if (mounted) _showSuggestions(serviceName, suggestions);
+        return;
+      }
+    } catch (_) {}
+    await _insertService(serviceName);
+  }
+
+  Future<void> _showSuggestions(String query, List<Map<String, dynamic>> suggestions) async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Did you mean?', style: AppTextStyles.bodyLarge),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('"$query" is similar to existing services:', style: AppTextStyles.bodyMedium),
+          SizedBox(height: 12.h),
+          ...suggestions.map((s) => ListTile(
+            dense: true,
+            title: Text(s['name'], style: AppTextStyles.bodyMedium),
+            subtitle: Text(s['category'] ?? '', style: AppTextStyles.caption),
+            onTap: () => Navigator.pop(ctx, s['id'].toString()),
+          )),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, 'new'), child: Text('No, submit "$query"', style: TextStyle(color: AppColors.primary))),
+        ],
+      ),
+    );
+    if (result == 'new') {
+      await _insertService(query);
+    } else if (result != null) {
+      final name = suggestions.firstWhere((s) => s['id'].toString() == result)['name'] as String;
+      _toggleService(result, name);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('"$name" added to your services.'), backgroundColor: AppColors.success));
+      }
+    }
+  }
+
+  Future<void> _insertService(String serviceName) async {
+    try {
       await _supabase.from('services').insert({
         'name': serviceName,
         'category': _selectedCategory ?? 'Uncategorized',
-        'status': 'pending',
+        'status': 'approved',
       });
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('"$serviceName" submitted for approval.'),
-        backgroundColor: AppColors.success,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('"$serviceName" added!'), backgroundColor: AppColors.success));
       _searchController.clear();
       setState(() { _isSearching = false; _searchResults = []; });
+      _loadServices();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('Failed to submit. Please try again.'),
-        backgroundColor: AppColors.error,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Failed to add service. Please try again.'), backgroundColor: AppColors.error));
     }
   }
 
   Future<void> _handleContinue() async {
     setState(() => _isSaving = true);
-
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null && _selectedServiceNames.isNotEmpty) {
-        // Update Firestore with service names for display
-        await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-          'services': _selectedServiceNames.toList(),
-          'isProvider': true,
-        });
-
-        // Add to Supabase provider_services
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).update({'services': _selectedServiceIds.map((id) => int.parse(id)).toList(), 'isProvider': true});
         for (final serviceId in _selectedServiceIds) {
-          try {
-            await Supabase.instance.client.rpc('add_user_service', params: {
-              'p_user_id': user.uid,
-              'p_service_id': int.parse(serviceId),
-            });
-          } catch (_) {}
+          try { await _supabase.rpc('add_user_service', params: {'p_user_id': user.uid, 'p_service_id': int.parse(serviceId)}); } catch (_) {}
         }
       }
     } catch (_) {}
-
     if (!mounted) return;
     setState(() => _isSaving = false);
     context.go('/home');
@@ -150,132 +167,30 @@ class _ServicesScreenState extends State<ServicesScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new, size: 20.sp),
-          onPressed: () => context.pop(),
-        ),
+        leading: IconButton(icon: Icon(Icons.arrow_back_ios_new, size: 20.sp), onPressed: () => context.pop()),
       ),
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 24.w),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(height: 16.h),
-                    Text('What services do you offer?', style: AppTextStyles.headline2),
-                    SizedBox(height: 8.h),
-                    Text(
-                      'Select the services you offer. If you skip, you won\'t appear as a provider yet. You can add or submit custom services anytime from your profile to be discoverable to clients who needs your service.',
-                      style: AppTextStyles.bodySmall.copyWith(color: AppColors.primary.withValues(alpha: 0.6)),
-                    ),
-                    SizedBox(height: 16.h),
-                    TextField(
-                      controller: _searchController,
-                      onChanged: _onSearchChanged,
-                      style: AppTextStyles.bodyMedium,
-                      decoration: InputDecoration(
-                        hintText: 'Search services...',
-                        hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.3)),
-                        prefixIcon: Icon(Icons.search, size: 20.sp, color: AppColors.primary.withValues(alpha: 0.5)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              if (_selectedServiceNames.isNotEmpty)
-                Container(
-                  height: 44.h,
-                  margin: EdgeInsets.only(top: 8.h),
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: EdgeInsets.symmetric(horizontal: 24.w),
-                    itemCount: _selectedServiceNames.length,
-                    separatorBuilder: (_, _) => SizedBox(width: 8.w),
-                    itemBuilder: (context, index) {
-                      final name = _selectedServiceNames.elementAt(index);
-                      return Chip(
-                        label: Text(name, style: AppTextStyles.bodySmall.copyWith(color: AppColors.white)),
-                        backgroundColor: AppColors.primary,
-                        deleteIcon: Icon(Icons.close, size: 16.sp, color: AppColors.white),
-                        onDeleted: () {
-                          final id = _selectedServiceIds.elementAt(index);
-                          _toggleService(id, name);
-                        },
-                      );
-                    },
-                  ),
-                ),
-
-              SizedBox(height: 8.h),
-
-              if (!_isSearching)
-                SizedBox(
-                  height: 36.h,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: EdgeInsets.symmetric(horizontal: 24.w),
-                    itemCount: _categories.length,
-                    separatorBuilder: (_, _) => SizedBox(width: 8.w),
-                    itemBuilder: (context, index) {
-                      final category = _categories[index];
-                      final isSelected = category == _selectedCategory;
-                      return GestureDetector(
-                        onTap: () => _onCategorySelected(category),
-                        child: Container(
-                          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 6.h),
-                          decoration: BoxDecoration(
-                            color: isSelected ? AppColors.primary : AppColors.primary.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(20.r),
-                          ),
-                          child: Text(category, style: AppTextStyles.bodySmall.copyWith(
-                            color: isSelected ? AppColors.white : AppColors.primary,
-                            fontWeight: FontWeight.w500,
-                          )),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-
-              SizedBox(height: 8.h),
-
-              Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _isSearching
-                        ? _buildSearchResults()
-                        : _buildCategoryServices(),
-              ),
-
-              Padding(
-                padding: EdgeInsets.fromLTRB(24.w, 12.h, 24.w, 32.h),
-                child: Column(
-                  children: [
-                    SizedBox(
-                      width: double.infinity, height: 48.h,
-                      child: ElevatedButton(
-                        onPressed: (_selectedServiceIds.isNotEmpty && !_isSaving) ? _handleContinue : null,
-                        child: _isSaving
-                            ? SizedBox(height: 20.h, width: 20.w, child: const CircularProgressIndicator(color: AppColors.white, strokeWidth: 2))
-                            : Text('Continue', style: AppTextStyles.button),
-                      ),
-                    ),
-                    SizedBox(height: 6.h),
-                    GestureDetector(
-                      onTap: () => context.go('/home'),
-                      child: Text('Skip for now', style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: AppColors.primary)),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Padding(padding: EdgeInsets.symmetric(horizontal: 24.w), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              SizedBox(height: 16.h), Text('What services do you offer?', style: AppTextStyles.headline2), SizedBox(height: 8.h),
+              Text('Select the services you offer. If you skip, you won\'t appear as a provider yet. You can add or submit custom services anytime from your profile to be discoverable to clients who needs your service.', style: AppTextStyles.bodySmall.copyWith(color: AppColors.primary.withValues(alpha: 0.6))), SizedBox(height: 16.h),
+              TextField(controller: _searchController, onChanged: _onSearchChanged, style: AppTextStyles.bodyMedium, decoration: InputDecoration(hintText: 'Search services...', hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.3)), prefixIcon: Icon(Icons.search, size: 20.sp, color: AppColors.primary.withValues(alpha: 0.5)))),
+            ])),
+            if (_selectedServiceNames.isNotEmpty)
+              Container(height: 44.h, margin: EdgeInsets.only(top: 8.h), child: ListView.separated(scrollDirection: Axis.horizontal, padding: EdgeInsets.symmetric(horizontal: 24.w), itemCount: _selectedServiceNames.length, separatorBuilder: (_, _) => SizedBox(width: 8.w), itemBuilder: (context, index) { final name = _selectedServiceNames.elementAt(index); return Chip(label: Text(name, style: AppTextStyles.bodySmall.copyWith(color: AppColors.white)), backgroundColor: AppColors.primary, deleteIcon: Icon(Icons.close, size: 16.sp, color: AppColors.white), onDeleted: () { final id = _selectedServiceIds.elementAt(index); _toggleService(id, name); }); })),
+            SizedBox(height: 8.h),
+            if (!_isSearching)
+              SizedBox(height: 36.h, child: ListView.separated(scrollDirection: Axis.horizontal, padding: EdgeInsets.symmetric(horizontal: 24.w), itemCount: _categories.length, separatorBuilder: (_, _) => SizedBox(width: 8.w), itemBuilder: (context, index) { final category = _categories[index]; final isSelected = category == _selectedCategory; return GestureDetector(onTap: () => _onCategorySelected(category), child: Container(padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 6.h), decoration: BoxDecoration(color: isSelected ? AppColors.primary : AppColors.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(20.r)), child: Text(category, style: AppTextStyles.bodySmall.copyWith(color: isSelected ? AppColors.white : AppColors.primary, fontWeight: FontWeight.w500)))); })),
+            SizedBox(height: 8.h),
+            Expanded(child: _isLoading ? const Center(child: CircularProgressIndicator()) : _isSearching ? _buildSearchResults() : _buildCategoryServices()),
+            Padding(padding: EdgeInsets.fromLTRB(24.w, 12.h, 24.w, 32.h), child: Column(children: [
+              SizedBox(width: double.infinity, height: 48.h, child: ElevatedButton(onPressed: (_selectedServiceIds.isNotEmpty && !_isSaving) ? _handleContinue : null, child: _isSaving ? SizedBox(height: 20.h, width: 20.w, child: const CircularProgressIndicator(color: AppColors.white, strokeWidth: 2)) : Text('Continue', style: AppTextStyles.button))),
+              SizedBox(height: 6.h),
+              GestureDetector(onTap: () => context.go('/home'), child: Text('Skip for now', style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, color: AppColors.primary))),
+            ])),
+          ]),
         ),
       ),
     );
@@ -283,54 +198,15 @@ class _ServicesScreenState extends State<ServicesScreen> {
 
   Widget _buildSearchResults() {
     final query = _searchController.text.trim();
-    return ListView(
-      padding: EdgeInsets.symmetric(horizontal: 24.w),
-      children: [
-        ..._searchResults.map((service) {
-          final id = service['id'] as String;
-          final name = service['name'] as String;
-          final category = service['category'] as String;
-          final selected = _isSelected(id);
-          return ListTile(
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            leading: Checkbox(value: selected, activeColor: AppColors.primary, onChanged: (_) => _toggleService(id, name)),
-            title: Text(name, style: AppTextStyles.bodyMedium),
-            subtitle: Text(category, style: AppTextStyles.caption),
-            onTap: () => _toggleService(id, name),
-          );
-        }),
-        if (query.isNotEmpty && !_searchResults.any((s) => (s['name'] as String).toLowerCase() == query.toLowerCase()))
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.add_circle_outline, color: AppColors.primary.withValues(alpha: 0.6), size: 22.sp),
-            title: Text('Can\'t find it? Submit "$query" for approval',
-                style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.7))),
-            onTap: () => _submitCustomService(query),
-          ),
-      ],
-    );
+    return ListView(padding: EdgeInsets.symmetric(horizontal: 24.w), children: [
+      ..._searchResults.map((service) { final id = service['id'] as String; final name = service['name'] as String; final category = service['category'] as String; final selected = _isSelected(id); return ListTile(contentPadding: EdgeInsets.zero, dense: true, leading: Checkbox(value: selected, activeColor: AppColors.primary, onChanged: (_) => _toggleService(id, name)), title: Text(name, style: AppTextStyles.bodyMedium), subtitle: Text(category, style: AppTextStyles.caption), onTap: () => _toggleService(id, name)); }),
+      if (query.isNotEmpty && !_searchResults.any((s) => (s['name'] as String).toLowerCase() == query.toLowerCase()))
+        ListTile(contentPadding: EdgeInsets.zero, leading: Icon(Icons.add_circle_outline, color: AppColors.primary.withValues(alpha: 0.6), size: 22.sp), title: Text('Can\'t find it? Submit "$query"', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.7))), onTap: () => _submitCustomService(query)),
+    ]);
   }
 
   Widget _buildCategoryServices() {
-    if (_filteredServices.isEmpty) {
-      return Center(child: Text('Select a category to see services',
-          style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.4))));
-    }
-    return ListView(
-      padding: EdgeInsets.symmetric(horizontal: 24.w),
-      children: _filteredServices.map((service) {
-        final id = service['id'] as String;
-        final name = service['name'] as String;
-        final selected = _isSelected(id);
-        return ListTile(
-          contentPadding: EdgeInsets.zero,
-          dense: true,
-          leading: Checkbox(value: selected, activeColor: AppColors.primary, onChanged: (_) => _toggleService(id, name)),
-          title: Text(name, style: AppTextStyles.bodyMedium),
-          onTap: () => _toggleService(id, name),
-        );
-      }).toList(),
-    );
+    if (_filteredServices.isEmpty) return Center(child: Text('Select a category to see services', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.4))));
+    return ListView(padding: EdgeInsets.symmetric(horizontal: 24.w), children: _filteredServices.map((service) { final id = service['id'] as String; final name = service['name'] as String; final selected = _isSelected(id); return ListTile(contentPadding: EdgeInsets.zero, dense: true, leading: Checkbox(value: selected, activeColor: AppColors.primary, onChanged: (_) => _toggleService(id, name)), title: Text(name, style: AppTextStyles.bodyMedium), onTap: () => _toggleService(id, name)); }).toList());
   }
 }

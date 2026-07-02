@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
 import '../../config/theme.dart';
 import '../../providers/auth_provider.dart';
 
@@ -18,6 +19,7 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   bool _isEarlyAccess = false;
+  bool _hasConnectionIssue = false;
 
   @override
   void initState() {
@@ -35,6 +37,7 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _loadConfigAndNavigate() async {
+    // Fetch early access config
     try {
       final configDoc = await FirebaseFirestore.instance
           .collection('app_config')
@@ -47,13 +50,29 @@ class _SplashScreenState extends State<SplashScreen>
       _isEarlyAccess = true;
     }
 
-    if (mounted) setState(() {});
+    if (!mounted) return;
 
-    await Future.delayed(const Duration(milliseconds: 2500));
+    // Store early access in provider
+    final authProvider = context.read<AuthProvider>();
+    authProvider.setEarlyAccess(_isEarlyAccess);
+
+    // Wait for auth status to be known (max 8 seconds)
+    final startTime = DateTime.now();
+
+    while (authProvider.status == AuthStatus.unknown) {
+      if (DateTime.now().difference(startTime).inSeconds > 8) {
+        if (mounted) setState(() => _hasConnectionIssue = true);
+        return;
+      }
+      await Future.delayed(const Duration(milliseconds: 200));
+    }
 
     if (!mounted) return;
 
-    final authProvider = context.read<AuthProvider>();
+    _navigate(authProvider);
+  }
+
+  void _navigate(AuthProvider authProvider) {
     final status = authProvider.status;
 
     switch (status) {
@@ -108,6 +127,30 @@ class _SplashScreenState extends State<SplashScreen>
                   letterSpacing: 0.5,
                 ),
               ),
+              if (_hasConnectionIssue) ...[
+                SizedBox(height: 40.h),
+                Text(
+                  'Connection issue.\nPlease check your internet.',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.white.withValues(alpha: 0.8),
+                  ),
+                ),
+                SizedBox(height: 20.h),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _hasConnectionIssue = false;
+                    });
+                    _loadConfigAndNavigate();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.white,
+                    foregroundColor: AppColors.primary,
+                  ),
+                  child: const Text('Retry'),
+                ),
+              ],
             ],
           ),
         ),

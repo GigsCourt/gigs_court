@@ -23,12 +23,12 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
   List<Map<String, dynamic>> _services = [];
   List<String> _workPhotos = [];
   bool _isLoading = true;
-
-  bool get _isEarlyAccess => context.read<app_auth.AuthProvider>().isEarlyAccess;
+  bool _isEarlyAccess = true;
 
   @override
   void initState() {
     super.initState();
+    _isEarlyAccess = context.read<app_auth.AuthProvider>().isEarlyAccess;
     _loadProfile();
   }
 

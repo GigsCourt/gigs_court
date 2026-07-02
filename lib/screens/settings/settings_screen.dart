@@ -16,12 +16,12 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _pushNotifications = true;
-
-  bool get _isEarlyAccess => context.read<app_auth.AuthProvider>().isEarlyAccess;
+  bool _isEarlyAccess = true;
 
   @override
   void initState() {
     super.initState();
+    _isEarlyAccess = context.read<app_auth.AuthProvider>().isEarlyAccess;
     _loadSettings();
   }
 
@@ -80,12 +80,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
       for (final doc in reviewsReceived.docs) { batch.delete(doc.reference); }
       batch.delete(FirebaseFirestore.instance.collection('users').doc(user.uid));
       await batch.commit();
-      await Supabase.instance.client.rpc('remove_user_data', params: {'p_user_id': user.uid});
+
+      // Check if user was subscribed to decrement counter
+      final userData = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final wasSubscribed = userData.data()?['isSubscribed'] == true;
+
+      final configUpdate = <String, dynamic>{
+        'totalUsers': FieldValue.increment(-1),
+      };
+      if (wasSubscribed) {
+        configUpdate['totalSubscribers'] = FieldValue.increment(-1);
+      }
+      await FirebaseFirestore.instance.collection('app_config').doc('global').set(configUpdate, SetOptions(merge: true));
+      
       await user.delete();
       if (mounted) context.go('/onboarding');
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to delete account. Please try again.'), backgroundColor: AppColors.error));
     }
+  }
+
+  Future<void> _helpAndSupport() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).collection('tickets').add({
+      'type': 'support',
+      'submittedBy': user.uid,
+      'subject': 'Help & Support',
+      'message': 'User requested support.',
+      'status': 'open',
+      'createdAt': FieldValue.serverTimestamp(),
+      'resolvedAt': null,
+    });
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Support ticket created. We will get back to you.'), backgroundColor: AppColors.success));
   }
 
   @override
@@ -106,7 +133,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _buildTile(Icons.info_outline, 'App Version', subtitle: '1.0.0'),
       SizedBox(height: 20.h),
       _buildSection('Support'),
-      _buildTile(Icons.support_outlined, 'Help & Support', onTap: () {}),
+      _buildTile(Icons.support_outlined, 'Help & Support', onTap: _helpAndSupport),
       SizedBox(height: 20.h),
       _buildTile(Icons.logout, 'Log Out', onTap: _logOut),
       SizedBox(height: 8.h),

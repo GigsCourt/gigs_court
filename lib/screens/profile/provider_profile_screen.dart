@@ -27,12 +27,12 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
   double? _distanceKm;
   bool _isDistanceLoading = false;
   String _providerAddress = '';
-
-  bool get _isEarlyAccess => context.read<app_auth.AuthProvider>().isEarlyAccess;
+  bool _isEarlyAccess = true;
 
   @override
   void initState() {
     super.initState();
+    _isEarlyAccess = context.read<app_auth.AuthProvider>().isEarlyAccess;
     _loadProfile();
   }
 
@@ -67,7 +67,10 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
     try {
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) { setState(() => _isDistanceLoading = false); return; }
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        setState(() => _isDistanceLoading = false);
+        return;
+      }
       final position = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.low, timeLimit: Duration(seconds: 5)));
       final result = await _supabase.rpc('find_all_providers', params: {'p_lat': position.latitude, 'p_lng': position.longitude});
       final providers = List<Map<String, dynamic>>.from(result);
@@ -77,7 +80,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
       }
       final locationData = await _supabase.from('provider_locations').select('address').eq('provider_id', widget.providerId).maybeSingle();
       if (locationData != null && mounted) {
-        setState(() => _providerAddress = locationData['address'] ?? '');
+        setState(() { _providerAddress = locationData['address'] ?? ''; });
       }
     } catch (_) {}
     setState(() => _isDistanceLoading = false);
@@ -108,7 +111,12 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
     if (!mounted) return;
     final shouldProceed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(title: Text('Important', style: AppTextStyles.bodyLarge), content: Text('Don\'t pay any provider you haven\'t seen or trust.', style: AppTextStyles.bodyMedium), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('I Understand', style: TextStyle(color: AppColors.primary)))]));
     if (shouldProceed != true || !mounted) return;
-    final chatRef = await FirebaseFirestore.instance.collection('chats').add({'participants': [_currentUser.uid, widget.providerId], 'lastMessage': '', 'lastMessageAt': FieldValue.serverTimestamp(), 'unreadCount': 0});
+    final chatRef = await FirebaseFirestore.instance.collection('chats').add({'participants': [_currentUser.uid, widget.providerId], 'lastMessage': '', 'lastMessageAt': FieldValue.serverTimestamp(), 'unreadCount': <String, int>{}});
+
+    // Increment total chats counter (only for new chats, not existing)
+    await FirebaseFirestore.instance.collection('app_config').doc('global').set({
+      'totalChats': FieldValue.increment(1),
+    }, SetOptions(merge: true));
 
     if (!_isEarlyAccess) {
       final existingLeads = await FirebaseFirestore.instance.collection('chats').where('participants', arrayContains: widget.providerId).get();

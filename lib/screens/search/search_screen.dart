@@ -31,12 +31,12 @@ class _SearchScreenState extends State<SearchScreen> {
   List<Map<String, dynamic>> _trendingServices = [];
   bool _isLoadingTrending = false;
   StreamSubscription? _locationSubscription;
-
-  bool get _isEarlyAccess => context.read<app_auth.AuthProvider>().isEarlyAccess;
+  bool _isEarlyAccess = true;
 
   @override
   void initState() {
     super.initState();
+    _isEarlyAccess = context.read<app_auth.AuthProvider>().isEarlyAccess;
     _getLocationAndLoad();
   }
 

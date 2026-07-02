@@ -92,14 +92,20 @@ class _AdminScreenState extends State<AdminScreen> {
 
   Future<Map<String, int>> _loadOverviewStats() async {
     try {
-      final usersSnap = await FirebaseFirestore.instance.collection('users').count().get();
-      final subsSnap = await FirebaseFirestore.instance.collection('users').where('isSubscribed', isEqualTo: true).count().get();
+      final configDoc = await FirebaseFirestore.instance.collection('app_config').doc('global').get();
+      final data = configDoc.data() ?? {};
+
+      // Pending reports still uses count (small dataset)
       final reportsSnap = await FirebaseFirestore.instance.collectionGroup('tickets').where('status', isEqualTo: 'pending').count().get();
-      final chatsSnap = await FirebaseFirestore.instance.collection('chats').count().get();
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final signupsSnap = await FirebaseFirestore.instance.collection('users').where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(today)).count().get();
-      return {'users': usersSnap.count ?? 0, 'subscribers': subsSnap.count ?? 0, 'revenue': (subsSnap.count ?? 0) * 3500, 'signups': signupsSnap.count ?? 0, 'chats': chatsSnap.count ?? 0, 'reports': reportsSnap.count ?? 0};
+
+      return {
+        'users': data['totalUsers'] ?? 0,
+        'subscribers': data['totalSubscribers'] ?? 0,
+        'chats': data['totalChats'] ?? 0,
+        'revenue': (data['totalSubscribers'] ?? 0) * 3500,
+        'signups': data['totalUsers'] ?? 0,
+        'reports': reportsSnap.count ?? 0,
+      };
     } catch (_) {
       return {'users': 0, 'subscribers': 0, 'revenue': 0, 'signups': 0, 'chats': 0, 'reports': 0};
     }
@@ -149,7 +155,10 @@ class _AdminScreenState extends State<AdminScreen> {
         if (subs.isEmpty) return Center(child: Text('No active subscriptions.', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.grey)));
         return ListView.builder(padding: EdgeInsets.all(16.w), itemCount: subs.length, itemBuilder: (context, index) {
           final data = subs[index].data() as Map<String, dynamic>;
-          return Container(margin: EdgeInsets.only(bottom: 8.h), padding: EdgeInsets.all(14.w), decoration: BoxDecoration(color: AppColors.white, borderRadius: BorderRadius.circular(12.r), border: Border.all(color: AppColors.primary.withValues(alpha: 0.08))), child: ListTile(contentPadding: EdgeInsets.zero, title: Text(data['displayName'] ?? data['name'] ?? 'Unknown', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)), subtitle: Text(data['email'] ?? '', style: AppTextStyles.caption), trailing: TextButton(onPressed: () async { await FirebaseFirestore.instance.collection('users').doc(subs[index].id).update({'isSubscribed': false}); }, child: Text('Revoke', style: AppTextStyles.caption.copyWith(color: AppColors.error)))));
+          return Container(margin: EdgeInsets.only(bottom: 8.h), padding: EdgeInsets.all(14.w), decoration: BoxDecoration(color: AppColors.white, borderRadius: BorderRadius.circular(12.r), border: Border.all(color: AppColors.primary.withValues(alpha: 0.08))), child: ListTile(contentPadding: EdgeInsets.zero, title: Text(data['displayName'] ?? data['name'] ?? 'Unknown', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)), subtitle: Text(data['email'] ?? '', style: AppTextStyles.caption), trailing: TextButton(onPressed: () async {
+  await FirebaseFirestore.instance.collection('users').doc(subs[index].id).update({'isSubscribed': false});
+  await FirebaseFirestore.instance.collection('app_config').doc('global').set({'totalSubscribers': FieldValue.increment(-1)}, SetOptions(merge: true));
+}, child: Text('Revoke', style: AppTextStyles.caption.copyWith(color: AppColors.error)))));
         });
       },
     );

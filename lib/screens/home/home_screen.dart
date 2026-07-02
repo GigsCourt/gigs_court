@@ -15,7 +15,6 @@ import '../../providers/auth_provider.dart' as app_auth;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
-
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -27,16 +26,16 @@ class _HomeScreenState extends State<HomeScreen> {
   List<ProviderCardData> _featuredProviders = [];
   List<ProviderCardData> _allProviders = [];
   bool _isLoading = true;
-  bool _showScrollToBottom = false;
+  bool _showScrollToTop = false;
   double? _userLat;
   double? _userLng;
   StreamSubscription? _locationSubscription;
-
-  bool get _isEarlyAccess => context.read<app_auth.AuthProvider>().isEarlyAccess;
+  bool _isEarlyAccess = true;
 
   @override
   void initState() {
     super.initState();
+    _isEarlyAccess = context.read<app_auth.AuthProvider>().isEarlyAccess;
     _scrollController.addListener(_onScroll);
     _getLocationAndLoad();
   }
@@ -50,16 +49,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onScroll() {
     if (_scrollController.hasClients) {
-      setState(() => _showScrollToBottom = _scrollController.offset > 400);
+      setState(() => _showScrollToTop = _scrollController.offset > 400);
     }
   }
 
   Future<void> _getLocationAndLoad() async {
     try {
       var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
+      if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
         setState(() => _isLoading = false);
         return;
@@ -76,7 +73,6 @@ class _HomeScreenState extends State<HomeScreen> {
         final freshPosition = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
         ).timeout(const Duration(seconds: 5));
-
         if (_userLat == null ||
             (freshPosition.latitude - _userLat!).abs() > 0.001 ||
             (freshPosition.longitude - _userLng!).abs() > 0.001) {
@@ -85,17 +81,11 @@ class _HomeScreenState extends State<HomeScreen> {
           await _loadProviders();
         }
       } catch (_) {
-        if (_userLat == null) {
-          setState(() => _isLoading = false);
-          return;
-        }
+        if (_userLat == null) { setState(() => _isLoading = false); return; }
       }
 
       _locationSubscription = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 100,
-        ),
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 100),
       ).listen((position) {
         _userLat = position.latitude;
         _userLng = position.longitude;
@@ -108,29 +98,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadProviders() async {
     if (_userLat == null || _userLng == null) return;
-
     try {
-      final nearbyData = await _supabase.rpc('find_all_providers', params: {
-        'p_lat': _userLat,
-        'p_lng': _userLng,
-      });
-
+      final nearbyData = await _supabase.rpc('find_all_providers', params: {'p_lat': _userLat, 'p_lng': _userLng});
       final nearbyUsers = List<Map<String, dynamic>>.from(nearbyData);
       if (nearbyUsers.isEmpty) {
-        setState(() {
-          _featuredProviders = [];
-          _allProviders = [];
-          _isLoading = false;
-        });
+        setState(() { _featuredProviders = []; _allProviders = []; _isLoading = false; });
         return;
       }
 
       final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-
       final userFutures = nearbyUsers.map((supa) {
         return FirebaseFirestore.instance.collection('users').doc(supa['provider_id'] as String).get();
       }).toList();
-
       final userDocs = await Future.wait(userFutures);
       final allServiceIds = <int>{};
       final providersRaw = <Map<String, dynamic>>[];
@@ -139,7 +118,6 @@ class _HomeScreenState extends State<HomeScreen> {
         final supa = nearbyUsers[i];
         final userDoc = userDocs[i];
         if (!userDoc.exists) continue;
-
         final id = supa['provider_id'] as String;
         final userData = userDoc.data()!;
         final serviceIds = List<int>.from(userData['services'] ?? []);
@@ -170,7 +148,7 @@ class _HomeScreenState extends State<HomeScreen> {
       Map<int, String> serviceNames = CacheService.get<Map<int, String>>('service_names') ?? {};
       final uncachedIds = allServiceIds.where((id) => !serviceNames.containsKey(id)).toList();
       if (uncachedIds.isNotEmpty) {
-        final namesData = await _supabase.rpc('get_service_names', params: {'service_ids': uncachedIds});
+        final namesData = await _supabase.rpc('get_service_names', params: {'p_service_ids': uncachedIds});
         for (final row in List<Map<String, dynamic>>.from(namesData)) {
           serviceNames[row['id'] as int] = row['name'] as String;
         }
@@ -238,70 +216,54 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text('GigsCourt', style: AppTextStyles.headline3),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.notifications_outlined, size: 22.sp),
-            onPressed: () => context.push('/notifications'),
-          ),
-        ],
+        actions: [IconButton(icon: Icon(Icons.notifications_outlined, size: 22.sp), onPressed: () => context.push('/notifications'))],
       ),
-      body: Stack(
-        children: [
-          _isLoading && _allProviders.isEmpty
-              ? _buildSkeletonGrid(crossAxisCount)
-              : RefreshIndicator(
-                  onRefresh: _loadProviders,
-                  child: ListView(
-                    controller: _scrollController,
-                    padding: EdgeInsets.all(16.w),
-                    children: [
-                      if (_featuredProviders.isNotEmpty) ...[
-                        Text('Featured Providers', style: AppTextStyles.bodyLarge),
-                        SizedBox(height: 12.h),
-                        SizedBox(height: 160.h, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: _featuredProviders.length, itemBuilder: (context, index) {
-                          final p = _featuredProviders[index];
-                          return ProviderCard(provider: p, isHorizontal: true, onTap: () => context.push('/provider/${p.id}'));
-                        })),
-                        SizedBox(height: 24.h),
-                      ],
-                      Text('All Providers', style: AppTextStyles.bodyLarge),
-                      SizedBox(height: 12.h),
-                      if (_allProviders.isEmpty)
-                        Padding(padding: EdgeInsets.all(32.h), child: Center(child: Text('No providers found nearby.', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.5)))))
-                      else
-                        GridView.builder(
-                          shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: crossAxisCount, childAspectRatio: 0.72, crossAxisSpacing: 12.w, mainAxisSpacing: 12.h),
-                          itemCount: _allProviders.length,
-                          itemBuilder: (context, index) {
-                            final p = _allProviders[index];
-                            return ProviderCard(provider: p, onTap: () => context.push('/provider/${p.id}'));
-                          },
-                        ),
-                    ],
-                  ),
-                ),
-          if (_showScrollToBottom)
-            Positioned(bottom: 20.h, right: 20.w, child: FloatingActionButton.small(
-              onPressed: () => _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut),
-              backgroundColor: AppColors.primary,
-              child: Icon(Icons.keyboard_arrow_up, color: AppColors.white),
-            )),
-        ],
-      ),
+      body: Stack(children: [
+        _isLoading && _allProviders.isEmpty
+            ? _buildSkeletonGrid(crossAxisCount)
+            : RefreshIndicator(
+                onRefresh: _loadProviders,
+                child: ListView(controller: _scrollController, padding: EdgeInsets.all(16.w), children: [
+                  if (_featuredProviders.isNotEmpty) ...[
+                    Text('Featured Providers', style: AppTextStyles.bodyLarge), SizedBox(height: 12.h),
+                    SizedBox(height: 160.h, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: _featuredProviders.length, itemBuilder: (context, index) {
+                      final p = _featuredProviders[index];
+                      return ProviderCard(provider: p, isHorizontal: true, onTap: () => context.push('/provider/${p.id}'));
+                    })),
+                    SizedBox(height: 24.h),
+                  ],
+                  Text('All Providers', style: AppTextStyles.bodyLarge), SizedBox(height: 12.h),
+                  if (_allProviders.isEmpty)
+                    Padding(padding: EdgeInsets.all(32.h), child: Center(child: Text('No providers found nearby.', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.5)))))
+                  else
+                    GridView.builder(
+                      shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: crossAxisCount, childAspectRatio: 0.72, crossAxisSpacing: 12.w, mainAxisSpacing: 12.h),
+                      itemCount: _allProviders.length,
+                      itemBuilder: (context, index) {
+                        final p = _allProviders[index];
+                        return ProviderCard(provider: p, onTap: () => context.push('/provider/${p.id}'));
+                      },
+                    ),
+                ]),
+              ),
+        if (_showScrollToTop)
+          Positioned(bottom: 20.h, right: 20.w, child: FloatingActionButton.small(
+            onPressed: () => _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut),
+            backgroundColor: AppColors.primary,
+            child: Icon(Icons.keyboard_arrow_up, color: AppColors.white),
+          )),
+      ]),
     );
   }
 
   Widget _buildSkeletonGrid(int crossAxisCount) {
-    return ListView(
-      padding: EdgeInsets.all(16.w),
-      children: [
-        const SkeletonLoader(width: 120, height: 18), SizedBox(height: 12.h),
-        SizedBox(height: 160.h, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: 3, itemBuilder: (_, _) => const ProviderCardSkeleton(isHorizontal: true))),
-        SizedBox(height: 24.h),
-        const SkeletonLoader(width: 100, height: 18), SizedBox(height: 12.h),
-        GridView.builder(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: crossAxisCount, childAspectRatio: 0.72, crossAxisSpacing: 12.w, mainAxisSpacing: 12.h), itemCount: 6, itemBuilder: (_, _) => const ProviderCardSkeleton()),
-      ],
-    );
+    return ListView(padding: EdgeInsets.all(16.w), children: [
+      const SkeletonLoader(width: 120, height: 18), SizedBox(height: 12.h),
+      SizedBox(height: 160.h, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: 3, itemBuilder: (_, _) => const ProviderCardSkeleton(isHorizontal: true))),
+      SizedBox(height: 24.h),
+      const SkeletonLoader(width: 100, height: 18), SizedBox(height: 12.h),
+      GridView.builder(shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: crossAxisCount, childAspectRatio: 0.72, crossAxisSpacing: 12.w, mainAxisSpacing: 12.h), itemCount: 6, itemBuilder: (_, _) => const ProviderCardSkeleton()),
+    ]);
   }
 }
