@@ -323,7 +323,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     return Scaffold(backgroundColor: AppColors.background, appBar: AppBar(
       leading: GestureDetector(
         onTap: _isOtherSubscribed ? () => context.push('/provider/${widget.otherUserId}') : null,
-        child: Padding(padding: EdgeInsets.all(8.w), child: FutureBuilder<DocumentSnapshot>(future: FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).get(), builder: (context, snap) {
+        child: Padding(padding: EdgeInsets.all(8.w), child: FutureBuilder<DocumentSnapshot?>(future: FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).get(), builder: (context, snap) {
           final data = snap.data?.data() as Map<String, dynamic>?;
           final photoUrl = data?['profileImage'] ?? data?['photoUrl'];
           return ClipRRect(borderRadius: BorderRadius.circular(24.r), child: photoUrl != null && photoUrl.toString().isNotEmpty ? CachedNetworkImage(imageUrl: photoUrl, fit: BoxFit.cover) : Icon(Icons.person, color: AppColors.primary.withValues(alpha: 0.3)));
@@ -331,7 +331,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       ),
       title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(widget.otherUserName, style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600)),
-        StreamBuilder<DocumentSnapshot>(stream: FirebaseFirestore.instance.collection('chats').doc(widget.chatId).snapshots(), builder: (context, snap) {
+        StreamBuilder<DocumentSnapshot?>(stream: FirebaseFirestore.instance.collection('chats').doc(widget.chatId).snapshots(), builder: (context, snap) {
           final data = snap.data?.data() as Map<String, dynamic>?;
           final typing = data?['typing_${widget.otherUserId}'] == true;
           return Text(typing ? 'typing...' : (_isOtherOnline ? 'Online' : 'Offline'), style: AppTextStyles.caption.copyWith(color: typing ? AppColors.primary : (_isOtherOnline ? AppColors.success : AppColors.grey)));
