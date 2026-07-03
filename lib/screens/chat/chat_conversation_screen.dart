@@ -82,11 +82,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   void _listenToTyping() {
     _messageController.addListener(() {
-      if (_messageController.text.isNotEmpty && !_isTyping) {
-        _setTyping(true);
-      } else if (_messageController.text.isEmpty && _isTyping) {
-        _setTyping(false);
-      }
+      if (_messageController.text.isNotEmpty && !_isTyping) _setTyping(true);
+      else if (_messageController.text.isEmpty && _isTyping) _setTyping(false);
     });
   }
 
@@ -106,12 +103,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   void _listenToOnlineStatus() {
     FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).snapshots().listen((doc) {
-      if (doc.exists && mounted) {
-        setState(() {
-          _isOtherOnline = doc.data()?['isOnline'] ?? false;
-          _isOtherSubscribed = doc.data()?['isSubscribed'] == true;
-        });
-      }
+      if (doc.exists && mounted) setState(() { _isOtherOnline = doc.data()?['isOnline'] ?? false; _isOtherSubscribed = doc.data()?['isSubscribed'] == true; });
     });
   }
 
@@ -136,12 +128,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       'unreadCount.${widget.otherUserId}': FieldValue.increment(1),
     });
 
-    if (text != null) {
-      _messageController.clear();
-      _setTyping(false);
-    }
-    // Create notification for receiver
-    final displayName = _currentUser.displayName ?? 'Someone';
+    if (text != null) { _messageController.clear(); _setTyping(false); }
+        // Create notification for receiver
+    final displayName = _currentUser!.displayName ?? 'Someone';
     final preview = lastMessage.length > 80 ? '${lastMessage.substring(0, 80)}...' : lastMessage;
     await FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).collection('notifications').add({
       'type': 'message',
@@ -150,7 +139,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       'read': false,
       'data': {
         'chatId': widget.chatId,
-        'otherUserId': _currentUser.uid,
+        'otherUserId': _currentUser!.uid,
         'otherUserName': displayName,
       },
       'createdAt': FieldValue.serverTimestamp(),
@@ -270,23 +259,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   Future<void> _loadMoreMessages() async {
     if (_isLoadingMore || !_hasMoreMessages || _lastDocument == null) return;
     setState(() => _isLoadingMore = true);
-    final snapshot = await FirebaseFirestore.instance
-        .collection('chats')
-        .doc(widget.chatId)
-        .collection('messages')
-        .orderBy('createdAt', descending: true)
-        .startAfterDocument(_lastDocument)
-        .limit(30)
-        .get();
-    if (snapshot.docs.isEmpty) {
-      setState(() {
-        _hasMoreMessages = false;
-        _isLoadingMore = false;
-      });
-    } else {
-      _lastDocument = snapshot.docs.last;
-      setState(() => _isLoadingMore = false);
-    }
+    final snapshot = await FirebaseFirestore.instance.collection('chats').doc(widget.chatId).collection('messages').orderBy('createdAt', descending: true).startAfterDocument(_lastDocument!).limit(30).get();
+    if (snapshot.docs.isEmpty) { setState(() { _hasMoreMessages = false; _isLoadingMore = false; }); }
+    else { _lastDocument = snapshot.docs.last; setState(() => _isLoadingMore = false); }
   }
 
   Future<void> _showReviewDialog() async {
@@ -323,7 +298,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     return Scaffold(backgroundColor: AppColors.background, appBar: AppBar(
       leading: GestureDetector(
         onTap: _isOtherSubscribed ? () => context.push('/provider/${widget.otherUserId}') : null,
-        child: Padding(padding: EdgeInsets.all(8.w), child: FutureBuilder<DocumentSnapshot?>(future: FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).get(), builder: (context, snap) {
+        child: Padding(padding: EdgeInsets.all(8.w), child: FutureBuilder<DocumentSnapshot>(future: FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).get(), builder: (context, snap) {
           final data = snap.data?.data() as Map<String, dynamic>?;
           final photoUrl = data?['profileImage'] ?? data?['photoUrl'];
           return ClipRRect(borderRadius: BorderRadius.circular(24.r), child: photoUrl != null && photoUrl.toString().isNotEmpty ? CachedNetworkImage(imageUrl: photoUrl, fit: BoxFit.cover) : Icon(Icons.person, color: AppColors.primary.withValues(alpha: 0.3)));
@@ -331,7 +306,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       ),
       title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(widget.otherUserName, style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600)),
-        StreamBuilder<DocumentSnapshot?>(stream: FirebaseFirestore.instance.collection('chats').doc(widget.chatId).snapshots(), builder: (context, snap) {
+        StreamBuilder<DocumentSnapshot>(stream: FirebaseFirestore.instance.collection('chats').doc(widget.chatId).snapshots(), builder: (context, snap) {
           final data = snap.data?.data() as Map<String, dynamic>?;
           final typing = data?['typing_${widget.otherUserId}'] == true;
           return Text(typing ? 'typing...' : (_isOtherOnline ? 'Online' : 'Offline'), style: AppTextStyles.caption.copyWith(color: typing ? AppColors.primary : (_isOtherOnline ? AppColors.success : AppColors.grey)));
@@ -399,42 +374,13 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   }
 
   Widget _buildReplyPreview(String replyToId) {
-    return FutureBuilder<DocumentSnapshot?>(
-      future: FirebaseFirestore.instance
-          .collection('chats')
-          .doc(widget.chatId)
-          .collection('messages')
-          .doc(replyToId)
-          .get(),
-      builder: (context, snap) {
-        final doc = snap.data;
-        if (doc == null || !doc.exists) return const SizedBox.shrink();
-        final data = doc.data() as Map<String, dynamic>;
-        final replyType = data['type'] ?? 'text';
-        final replyText = replyType == 'image'
-            ? '📷 Photo'
-            : replyType == 'voice'
-                ? '🎤 Voice note'
-                : (data['text'] ?? '');
-        return Container(
-          margin: EdgeInsets.only(bottom: 4.h),
-          padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(8.r),
-            border: Border(
-              left: BorderSide(color: AppColors.primary, width: 3.w),
-            ),
-          ),
-          child: Text(
-            replyText,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppTextStyles.caption,
-          ),
-        );
-      },
-    );
+    return FutureBuilder<DocumentSnapshot>(future: FirebaseFirestore.instance.collection('chats').doc(widget.chatId).collection('messages').doc(replyToId).get(), builder: (context, snap) {
+      if (!snap.hasData || !snap.data!.exists) return const SizedBox.shrink();
+      final data = snap.data!.data() as Map<String, dynamic>;
+      final replyType = data['type'] ?? 'text';
+      final replyText = replyType == 'image' ? '📷 Photo' : replyType == 'voice' ? '🎤 Voice note' : (data['text'] ?? '');
+      return Container(margin: EdgeInsets.only(bottom: 4.h), padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h), decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(8.r), border: Border(left: BorderSide(color: AppColors.primary, width: 3.w))), child: Text(replyText, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.caption));
+    });
   }
 
   Widget _buildMessageBubble(String type, String text, String? imageUrl, String? voiceUrl, int? voiceDuration, bool isMine) {
