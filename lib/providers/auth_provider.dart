@@ -46,10 +46,18 @@ class AuthProvider extends ChangeNotifier {
       return;
     }
 
-    // Check Firestore if setup is already completed
+    // Check Firestore if user document exists and setup is completed
     try {
       final doc = await _firestore.collection('users').doc(user.uid).get();
-      if (doc.exists && doc.data()?['setupComplete'] == true) {
+      if (!doc.exists) {
+        // User document doesn't exist — user was deleted, sign out
+        await _auth.signOut();
+        _user = null;
+        _status = AuthStatus.unauthenticated;
+        notifyListeners();
+        return;
+      }
+      if (doc.data()?['setupComplete'] == true) {
         _status = AuthStatus.authenticated;
         notifyListeners();
         return;

@@ -79,7 +79,13 @@ class _AuthScreenState extends State<AuthScreen> {
       await Future.delayed(const Duration(milliseconds: 500));
       if (!mounted) return;
       final status = authProvider.status;
-      if (status == AuthStatus.emailNotVerified) { context.go('/verify-email', extra: _signInEmailController.text.trim()); } else { context.go('/setup/photo'); }
+      if (status == AuthStatus.emailNotVerified) {
+        context.go('/verify-email', extra: _signInEmailController.text.trim());
+      } else if (status == AuthStatus.authenticated) {
+        context.go('/home');
+      } else {
+        context.go('/setup/photo');
+      }
     } else { setState(() => _errorMessage = result.error); }
   }
 
