@@ -54,7 +54,8 @@ class _MainShellState extends State<MainShell> {
       int count = 0;
       for (final doc in snapshot.docs) {
         final data = doc.data();
-        count += (data['unreadCount'] ?? 0) as int;
+        final unreadMap = data['unreadCount'] as Map<String, dynamic>?;
+        count += (unreadMap?[user.uid] ?? 0) as int;
       }
       if (mounted) setState(() => _unreadChats = count);
     });
@@ -62,9 +63,17 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    final destinations = [
-      NavigationDestination(icon: Icon(Icons.home_outlined, size: 22.sp), selectedIcon: Icon(Icons.home, size: 22.sp), label: 'Home'),
-      NavigationDestination(icon: Icon(Icons.search_outlined, size: 22.sp), selectedIcon: Icon(Icons.search, size: 22.sp), label: 'Search'),
+    final destinations = <NavigationDestination>[
+      NavigationDestination(
+        icon: Icon(Icons.home_outlined, size: 22.sp),
+        selectedIcon: Icon(Icons.home, size: 22.sp),
+        label: 'Home',
+      ),
+      NavigationDestination(
+        icon: Icon(Icons.search_outlined, size: 22.sp),
+        selectedIcon: Icon(Icons.search, size: 22.sp),
+        label: 'Search',
+      ),
       NavigationDestination(
         icon: _buildChatIcon(Icons.chat_bubble_outline),
         selectedIcon: _buildChatIcon(Icons.chat_bubble),
@@ -76,23 +85,33 @@ class _MainShellState extends State<MainShell> {
         label: 'Profile',
       ),
       if (_isAdmin)
-        NavigationDestination(icon: Icon(Icons.shield_outlined, size: 22.sp), selectedIcon: Icon(Icons.shield, size: 22.sp), label: 'Admin'),
+        NavigationDestination(
+          icon: Icon(Icons.shield_outlined, size: 22.sp),
+          selectedIcon: Icon(Icons.shield, size: 22.sp),
+          label: 'Admin',
+        ),
+    ];
+
+    final screens = <Widget>[
+      const HomeScreen(),
+      const SearchScreen(),
+      const ChatListScreen(),
+      const OwnProfileScreen(),
+      if (_isAdmin) const AdminScreen(),
     ];
 
     return Scaffold(
       body: IndexedStack(
-        index: _currentIndex,
-        children: [
-          const HomeScreen(),
-          const SearchScreen(),
-          const ChatListScreen(),
-          const OwnProfileScreen(),
-          if (_isAdmin) const AdminScreen(),
-        ],
+        index: _currentIndex < screens.length ? _currentIndex : 0,
+        children: screens,
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
-        onDestinationSelected: (index) => setState(() => _currentIndex = index),
+        onDestinationSelected: (index) {
+          if (index < destinations.length) {
+            setState(() => _currentIndex = index);
+          }
+        },
         backgroundColor: AppColors.background,
         indicatorColor: AppColors.primary.withValues(alpha: 0.12),
         destinations: destinations,
@@ -103,7 +122,10 @@ class _MainShellState extends State<MainShell> {
   Widget _buildChatIcon(IconData icon) {
     if (_unreadChats > 0) {
       return Badge(
-        label: Text(_unreadChats > 99 ? '99+' : '$_unreadChats', style: TextStyle(fontSize: 10.sp, color: AppColors.white)),
+        label: Text(
+          _unreadChats > 99 ? '99+' : '$_unreadChats',
+          style: TextStyle(fontSize: 10.sp, color: AppColors.white),
+        ),
         backgroundColor: AppColors.error,
         child: Icon(icon, size: 22.sp),
       );
@@ -114,13 +136,21 @@ class _MainShellState extends State<MainShell> {
   Widget _buildProfileIcon() {
     final user = FirebaseAuth.instance.currentUser;
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(user?.uid).snapshots(),
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(user?.uid)
+          .snapshots(),
       builder: (context, snapshot) {
         final data = snapshot.data?.data() as Map<String, dynamic>?;
         final photoUrl = data?['profileImage'] ?? data?['photoUrl'];
         if (photoUrl != null && photoUrl.toString().isNotEmpty) {
           return ClipOval(
-            child: Image.network(photoUrl, width: 24.sp, height: 24.sp, fit: BoxFit.cover),
+            child: Image.network(
+              photoUrl,
+              width: 24.sp,
+              height: 24.sp,
+              fit: BoxFit.cover,
+            ),
           );
         }
         return Icon(Icons.person_outline, size: 22.sp);

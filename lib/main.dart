@@ -73,11 +73,42 @@ void _handleNotificationTap(Map<String, dynamic> data) {
   final type = data['type'];
   switch (type) {
     case 'message':
-      appRouter.go('/home');
+      final chatId = data['chatId'] as String?;
+      final otherUserId = data['otherUserId'] as String?;
+      final otherUserName = data['otherUserName'] as String?;
+      if (chatId != null && chatId.isNotEmpty &&
+          otherUserId != null && otherUserId.isNotEmpty) {
+        appRouter.push('/chat/$chatId', extra: {
+          'otherUserId': otherUserId,
+          'otherUserName': otherUserName ?? 'User',
+        });
+      } else {
+        appRouter.go('/home');
+      }
       break;
-    case 'subscription_expired':
+    case 'review':
+    case 'review_milestone':
+    case 'review_limit':
+      final userId = data['providerId'] as String?;
+      if (userId != null && userId.isNotEmpty) {
+        appRouter.push('/reviews/$userId');
+      } else {
+        appRouter.go('/home');
+      }
+      break;
+    case 'lead_milestone':
+    case 'lead_limit':
+      final userId = data['providerId'] as String?;
+      if (userId != null && userId.isNotEmpty) {
+        appRouter.push('/provider/$userId');
+      } else {
+        appRouter.go('/home');
+      }
+      break;
+    case 'missed_connection':
     case 'subscription_expiring':
-      appRouter.go('/subscription');
+    case 'subscription_expired':
+      appRouter.push('/subscription');
       break;
     default:
       appRouter.go('/home');

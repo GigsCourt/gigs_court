@@ -23,12 +23,10 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
   List<Map<String, dynamic>> _services = [];
   List<String> _workPhotos = [];
   bool _isLoading = true;
-  bool _isEarlyAccess = true;
 
   @override
   void initState() {
     super.initState();
-    _isEarlyAccess = context.read<app_auth.AuthProvider>().isEarlyAccess;
     _loadProfile();
   }
 
@@ -94,6 +92,7 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isEarlyAccess = context.watch<app_auth.AuthProvider>().isEarlyAccess;
     if (_isLoading) return Scaffold(backgroundColor: AppColors.background, body: const Center(child: CircularProgressIndicator()));
     final user = FirebaseAuth.instance.currentUser;
     final name = _userData?['displayName'] ?? _userData?['name'] ?? 'Unknown';
@@ -101,7 +100,7 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
     final bio = _userData?['bio'] ?? '';
     final address = _userData?['workspaceAddress'] ?? '';
     final isSubscribed = _userData?['isSubscribed'] == true;
-    final showBadge = _isEarlyAccess || isSubscribed;
+    final showBadge = isEarlyAccess || isSubscribed;
     final isOnline = _userData?['isOnline'] ?? false;
     final lastSeen = _userData?['lastSeen'];
     final rating = (_userData?['rating'] ?? _userData?['averageRating'] ?? 0.0).toDouble();
@@ -109,7 +108,7 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
     final savedCount = (_userData?['savedProviders'] as List?)?.length ?? 0;
     final leadCount = _userData?['leadCount'] ?? 0;
     final subscriptionStatus = _userData?['subscriptionStatus'] ?? 'free';
-    final isLocked = !_isEarlyAccess && !isSubscribed && (leadCount >= 10 || reviewCount >= 5);
+    final isLocked = !isEarlyAccess && !isSubscribed && (leadCount >= 10 || reviewCount >= 5);
 
     return Scaffold(backgroundColor: AppColors.background, appBar: AppBar(title: Text('Profile', style: AppTextStyles.headline3), actions: [IconButton(icon: Icon(Icons.settings_outlined, size: 22.sp), onPressed: () => context.push('/settings'))]), body: SingleChildScrollView(padding: EdgeInsets.all(20.w), child: Column(children: [
       Center(child: ClipRRect(borderRadius: BorderRadius.circular(80.r), child: SizedBox(width: 140.w, height: 140.w, child: photoUrl != null && photoUrl.toString().isNotEmpty ? Image.network(photoUrl, fit: BoxFit.cover) : Container(color: AppColors.primary.withValues(alpha: 0.06), child: Icon(Icons.person, size: 60.sp, color: AppColors.primary.withValues(alpha: 0.3)))))),
@@ -123,7 +122,7 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
       if (bio.isNotEmpty) ...[Text(bio, textAlign: TextAlign.center, style: AppTextStyles.bodyMedium.copyWith(height: 1.5)), SizedBox(height: 16.h)],
       if (_services.isNotEmpty) ...[Text('Services', style: AppTextStyles.bodyLarge), SizedBox(height: 8.h), Wrap(alignment: WrapAlignment.center, spacing: 8.w, runSpacing: 8.h, children: _services.map((s) => Chip(label: Text(s['name'] ?? '', style: AppTextStyles.bodySmall), backgroundColor: AppColors.primary.withValues(alpha: 0.08), side: BorderSide.none)).toList()), SizedBox(height: 16.h)],
       if (address.isNotEmpty) ...[Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.location_on_outlined, size: 16.sp, color: AppColors.primary.withValues(alpha: 0.5)), SizedBox(width: 4.w), Flexible(child: Text(address, style: AppTextStyles.bodySmall.copyWith(color: AppColors.primary.withValues(alpha: 0.7))))]), SizedBox(height: 16.h)],
-      _buildStatusBar(subscriptionStatus, leadCount, reviewCount, isLocked), SizedBox(height: 20.h),
+      _buildStatusBar(subscriptionStatus, leadCount, reviewCount, isLocked, isEarlyAccess), SizedBox(height: 20.h),
       SizedBox(width: double.infinity, height: 48.h, child: OutlinedButton(onPressed: () => context.push('/edit-profile'), style: OutlinedButton.styleFrom(side: BorderSide(color: AppColors.primary), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r))), child: Text('Edit Profile', style: AppTextStyles.button.copyWith(color: AppColors.primary)))),
       SizedBox(height: 24.h),
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('Work Photos', style: AppTextStyles.bodyLarge), if (_workPhotos.length < 15) TextButton(onPressed: _addWorkPhotos, child: Text('Add Photos', style: AppTextStyles.bodySmall.copyWith(color: AppColors.primary, fontWeight: FontWeight.w600)))]),
@@ -135,9 +134,9 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
   Widget _buildStat(String value, String label) => Column(children: [Text(value, style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.w700)), Text(label, style: AppTextStyles.caption)]);
   Widget _buildDivider() => Container(height: 24.h, width: 1.w, color: AppColors.primary.withValues(alpha: 0.15), margin: EdgeInsets.symmetric(horizontal: 16.w));
 
-  Widget _buildStatusBar(String status, int leadCount, int reviewCount, bool isLocked) {
-    if (status == 'premium' || (_isEarlyAccess && status != 'locked')) {
-      return Container(width: double.infinity, padding: EdgeInsets.all(12.w), decoration: BoxDecoration(color: AppColors.success.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12.r)), child: Row(children: [Icon(Icons.verified, color: AppColors.success, size: 20.sp), SizedBox(width: 8.w), Text(_isEarlyAccess ? 'Early Access — All features unlocked' : 'Premium — Active', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.success, fontWeight: FontWeight.w600))]));
+  Widget _buildStatusBar(String status, int leadCount, int reviewCount, bool isLocked, bool isEarlyAccess) {
+    if (status == 'premium' || (isEarlyAccess && status != 'locked')) {
+      return Container(width: double.infinity, padding: EdgeInsets.all(12.w), decoration: BoxDecoration(color: AppColors.success.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12.r)), child: Row(children: [Icon(Icons.verified, color: AppColors.success, size: 20.sp), SizedBox(width: 8.w), Text(isEarlyAccess ? 'Early Access — All features unlocked' : 'Premium — Active', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.success, fontWeight: FontWeight.w600))]));
     }
     if (isLocked) return GestureDetector(onTap: () => context.push('/subscription'), child: Container(width: double.infinity, padding: EdgeInsets.all(12.w), decoration: BoxDecoration(color: AppColors.error.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12.r)), child: Row(children: [Icon(Icons.lock_outline, color: AppColors.error, size: 20.sp), SizedBox(width: 8.w), Expanded(child: Text('Subscribe to continue receiving clients', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.error, fontWeight: FontWeight.w600))), Icon(Icons.chevron_right, color: AppColors.error, size: 20.sp)])));
     return Container(width: double.infinity, padding: EdgeInsets.all(12.w), decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(12.r)), child: Column(children: [Text('Free — $leadCount/10 leads | $reviewCount/5 reviews', style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600)), SizedBox(height: 6.h), Row(children: [Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(4.r), child: LinearProgressIndicator(value: leadCount / 10, minHeight: 4.h, backgroundColor: AppColors.primary.withValues(alpha: 0.1), color: AppColors.primary))), SizedBox(width: 8.w), Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(4.r), child: LinearProgressIndicator(value: reviewCount / 5, minHeight: 4.h, backgroundColor: AppColors.success.withValues(alpha: 0.2), color: AppColors.success)))])]));

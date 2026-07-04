@@ -15,6 +15,8 @@ export const sendPushOnNotification = functions.firestore
 
     if (!fcmToken || !pushEnabled) return;
 
+    const notifData = notif.data || {};
+
     await admin.messaging().send({
       token: fcmToken,
       notification: {
@@ -23,6 +25,10 @@ export const sendPushOnNotification = functions.firestore
       },
       data: {
         type: notif.type || "",
+        chatId: String(notifData.chatId || ""),
+        otherUserId: String(notifData.otherUserId || ""),
+        otherUserName: String(notifData.otherUserName || ""),
+        providerId: String(notifData.providerId || ""),
         click_action: "FLUTTER_NOTIFICATION_CLICK",
       },
     });

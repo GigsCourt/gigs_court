@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../config/theme.dart';
@@ -17,22 +18,81 @@ class SubscriptionScreen extends StatefulWidget {
 class _SubscriptionScreenState extends State<SubscriptionScreen> {
   bool _isLoading = false;
   bool _isNigeria = false;
+  bool _isLoadingPrice = true;
+  int _basePriceNGN = 3500;
+  int _basePriceUSD = 10;
 
   @override
   void initState() {
     super.initState();
     final locale = WidgetsBinding.instance.platformDispatcher.locale;
     _isNigeria = locale.countryCode == 'NG';
+    _loadPrices();
   }
 
+  Future<void> _loadPrices() async {
+    try {
+      final configDoc = await FirebaseFirestore.instance
+          .collection('app_config')
+          .doc('global')
+          .get();
+      if (configDoc.exists) {
+        final data = configDoc.data()!;
+        if (mounted) {
+          setState(() {
+            _basePriceNGN = (data['subscriptionPriceNGN'] ?? 3500) as int;
+            _basePriceUSD = (data['subscriptionPriceUSD'] ?? 10) as int;
+            _isLoadingPrice = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _isLoadingPrice = false);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingPrice = false);
+    }
+  }
+
+  int get _basePrice => _isNigeria ? _basePriceNGN : _basePriceUSD;
   String get _currency => _isNigeria ? 'NGN' : 'USD';
   String get _currencySymbol => _isNigeria ? '₦' : '\$';
 
-  List<Map<String, dynamic>> get _tiers => [
-    {'months': 1, 'price': _isNigeria ? 3500 : 10, 'label': '1 Month'},
-    {'months': 6, 'price': _isNigeria ? 20000 : 50, 'label': '6 Months', 'savings': _isNigeria ? 'Save ₦1,000' : 'Save \$10'},
-    {'months': 12, 'price': _isNigeria ? 35700 : 102, 'label': '12 Months', 'savings': '15% off'},
-  ];
+  List<Map<String, dynamic>> get _tiers {
+    final monthly = _basePrice;
+    final sixMonthPrice = (monthly * 6 * 0.9).round();
+    final twelveMonthPrice = (monthly * 12 * 0.85).round();
+    final sixMonthSaving = (monthly * 6) - sixMonthPrice;
+    final twelveMonthSaving = (monthly * 12) - twelveMonthPrice;
+
+    return [
+      {
+        'months': 1,
+        'price': monthly,
+        'label': '1 Month',
+        'savings': null,
+      },
+      {
+        'months': 6,
+        'price': sixMonthPrice,
+        'label': '6 Months',
+        'savings': 'Save $_currencySymbol${_formatPrice(sixMonthSaving)}',
+      },
+      {
+        'months': 12,
+        'price': twelveMonthPrice,
+        'label': '12 Months',
+        'savings': '15% off (Save $_currencySymbol${_formatPrice(twelveMonthSaving)})',
+      },
+    ];
+  }
+
+  String _formatPrice(int price) {
+    if (_isNigeria) {
+      return price.toString().replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+    }
+    return price.toString();
+  }
 
   int _selectedTier = 0;
 
@@ -47,8 +107,12 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       final tier = _tiers[_selectedTier];
 
       final response = await http.post(
-        Uri.parse('https://us-central1-gigs-court.cloudfunctions.net/initializePayment'),
-        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $idToken'},
+        Uri.parse(
+            'https://us-central1-gigs-court.cloudfunctions.net/initializePayment'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $idToken',
+        },
         body: jsonEncode({
           'email': user.email,
           'amount': tier['price'],
@@ -66,19 +130,41 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         if (mounted) {
           final result = await Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => _PaystackWebView(url: authUrl, reference: reference),
+              builder: (_) => _PaystackWebView(
+                url: authUrl,
+                reference: reference,
+              ),
             ),
           );
           if (result == true && mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Subscription activated!'), backgroundColor: AppColors.success));
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Subscription activated!'),
+                backgroundColor: AppColors.success,
+              ),
+            );
             context.pop();
           }
         }
       } else {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payment initialization failed.'), backgroundColor: AppColors.error));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Payment initialization failed.'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Something went wrong. Please try again.'), backgroundColor: AppColors.error));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Something went wrong. Please try again.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -86,87 +172,172 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoadingPrice) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+            title: Text('GigsCourt Premium', style: AppTextStyles.headline3)),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: Text('GigsCourt Premium', style: AppTextStyles.headline3)),
+      appBar: AppBar(
+          title: Text('GigsCourt Premium', style: AppTextStyles.headline3)),
       body: SafeArea(
         child: Padding(
           padding: EdgeInsets.all(24.w),
-          child: Column(children: [
-            Icon(Icons.verified, size: 56.sp, color: Color(0xFF2196F3)),
-            SizedBox(height: 12.h),
-            Text('Unlock Premium', style: AppTextStyles.headline1),
-            SizedBox(height: 8.h),
-            Text('Get unlimited visibility and more clients', textAlign: TextAlign.center, style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.6))),
-            SizedBox(height: 24.h),
-
-            // Tier cards
-            ...List.generate(_tiers.length, (i) {
-              final tier = _tiers[i];
-              final isSelected = _selectedTier == i;
-              return GestureDetector(
-                onTap: () => setState(() => _selectedTier = i),
-                child: Container(
-                  margin: EdgeInsets.only(bottom: 12.h),
-                  padding: EdgeInsets.all(16.w),
-                  decoration: BoxDecoration(
-                    color: isSelected ? AppColors.primary.withValues(alpha: 0.04) : AppColors.white,
-                    borderRadius: BorderRadius.circular(16.r),
-                    border: Border.all(color: isSelected ? AppColors.primary : AppColors.primary.withValues(alpha: 0.15), width: isSelected ? 2 : 1),
-                  ),
-                  child: Row(children: [
-                    Icon(isSelected ? Icons.radio_button_checked : Icons.radio_button_off, size: 22.sp, color: isSelected ? AppColors.primary : AppColors.grey),
-                    SizedBox(width: 12.w),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(tier['label'], style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
-                      if (tier['savings'] != null) Text(tier['savings'], style: AppTextStyles.caption.copyWith(color: AppColors.success)),
-                    ])),
-                    Text('$_currencySymbol${tier['price']}', style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.w700)),
-                  ]),
+          child: Column(
+            children: [
+              Icon(Icons.verified, size: 56.sp, color: Color(0xFF2196F3)),
+              SizedBox(height: 12.h),
+              Text('Unlock Premium', style: AppTextStyles.headline1),
+              SizedBox(height: 8.h),
+              Text(
+                'Get unlimited visibility and more clients',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: AppColors.primary.withValues(alpha: 0.6),
                 ),
-              );
-            }),
-
-            SizedBox(height: 16.h),
-
-            // Benefits
-            ...['Unlimited client leads', 'Verified badge on your profile', 'Priority ranking in search', 'Appear in Featured section', 'Online status visible to clients'].map((b) => Padding(
-              padding: EdgeInsets.only(bottom: 8.h),
-              child: Row(children: [
-                Icon(Icons.check_circle, color: AppColors.success, size: 18.sp),
-                SizedBox(width: 8.w),
-                Text(b, style: AppTextStyles.bodySmall),
-              ]),
-            )),
-
-            if (!_isNigeria)
-              Padding(
-                padding: EdgeInsets.only(top: 12.h),
-                child: Row(children: [
-                  Icon(Icons.credit_card, size: 18.sp, color: AppColors.primary.withValues(alpha: 0.6)),
-                  SizedBox(width: 8.w),
-                  Text('Pay securely with your card', style: AppTextStyles.caption.copyWith(color: AppColors.primary.withValues(alpha: 0.6))),
-                ]),
               ),
+              SizedBox(height: 24.h),
 
-            const Spacer(),
+              // Tier cards
+              ...List.generate(_tiers.length, (i) {
+                final tier = _tiers[i];
+                final isSelected = _selectedTier == i;
+                return GestureDetector(
+                  onTap: () => setState(() => _selectedTier = i),
+                  child: Container(
+                    margin: EdgeInsets.only(bottom: 12.h),
+                    padding: EdgeInsets.all(16.w),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppColors.primary.withValues(alpha: 0.04)
+                          : AppColors.white,
+                      borderRadius: BorderRadius.circular(16.r),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppColors.primary
+                            : AppColors.primary.withValues(alpha: 0.15),
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isSelected
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_off,
+                          size: 22.sp,
+                          color:
+                              isSelected ? AppColors.primary : AppColors.grey,
+                        ),
+                        SizedBox(width: 12.w),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                tier['label'],
+                                style: AppTextStyles.bodyMedium.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              if (tier['savings'] != null)
+                                Text(
+                                  tier['savings'],
+                                  style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.success,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '$_currencySymbol${_formatPrice(tier['price'])}',
+                          style: AppTextStyles.bodyLarge.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
 
-            SizedBox(width: double.infinity, height: 52.h,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _subscribe,
-                child: _isLoading
-                    ? SizedBox(height: 22.h, width: 22.w, child: const CircularProgressIndicator(color: AppColors.white, strokeWidth: 2))
-                    : Text('Subscribe Now', style: AppTextStyles.button),
+              SizedBox(height: 16.h),
+
+              // Benefits
+              ..._benefits.map((b) => Padding(
+                    padding: EdgeInsets.only(bottom: 8.h),
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle,
+                            color: AppColors.success, size: 18.sp),
+                        SizedBox(width: 8.w),
+                        Text(b, style: AppTextStyles.bodySmall),
+                      ],
+                    ),
+                  )),
+
+              if (!_isNigeria)
+                Padding(
+                  padding: EdgeInsets.only(top: 12.h),
+                  child: Row(
+                    children: [
+                      Icon(Icons.credit_card,
+                          size: 18.sp,
+                          color: AppColors.primary.withValues(alpha: 0.6)),
+                      SizedBox(width: 8.w),
+                      Text(
+                        'Pay securely with your card',
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.primary.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              const Spacer(),
+
+              SizedBox(
+                width: double.infinity,
+                height: 52.h,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _subscribe,
+                  child: _isLoading
+                      ? SizedBox(
+                          height: 22.h,
+                          width: 22.w,
+                          child: const CircularProgressIndicator(
+                            color: AppColors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text('Subscribe Now', style: AppTextStyles.button),
+                ),
               ),
-            ),
-            SizedBox(height: 12.h),
-            Text('One-time payment. Does not auto-renew.', style: AppTextStyles.caption),
-            SizedBox(height: 16.h),
-          ]),
+              SizedBox(height: 12.h),
+              Text('One-time payment. Does not auto-renew.',
+                  style: AppTextStyles.caption),
+              SizedBox(height: 16.h),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  static const _benefits = [
+    'Unlimited client leads',
+    'Verified badge on your profile',
+    'Priority ranking in search',
+    'Appear in Featured section',
+    'Online status visible to clients',
+  ];
 }
 
 class _PaystackWebView extends StatefulWidget {
@@ -191,7 +362,9 @@ class _PaystackWebViewState extends State<_PaystackWebView> {
         onPageStarted: (_) => setState(() => _isLoading = true),
         onPageFinished: (url) {
           setState(() => _isLoading = false);
-          if (url.contains('paystack.com') && url.contains('success')) _verifyAndClose();
+          if (url.contains('paystack.com') && url.contains('success')) {
+            _verifyAndClose();
+          }
         },
       ))
       ..loadRequest(Uri.parse(widget.url));
@@ -203,8 +376,12 @@ class _PaystackWebViewState extends State<_PaystackWebView> {
       if (user == null) return;
       final idToken = await user.getIdToken();
       await http.post(
-        Uri.parse('https://us-central1-gigs-court.cloudfunctions.net/verifyPayment'),
-        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $idToken'},
+        Uri.parse(
+            'https://us-central1-gigs-court.cloudfunctions.net/verifyPayment'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $idToken',
+        },
         body: jsonEncode({'reference': widget.reference}),
       );
       if (mounted) Navigator.of(context).pop(true);
@@ -218,10 +395,12 @@ class _PaystackWebViewState extends State<_PaystackWebView> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(title: Text('Payment', style: AppTextStyles.headline3)),
-      body: Stack(children: [
-        WebViewWidget(controller: _controller),
-        if (_isLoading) const Center(child: CircularProgressIndicator()),
-      ]),
+      body: Stack(
+        children: [
+          WebViewWidget(controller: _controller),
+          if (_isLoading) const Center(child: CircularProgressIndicator()),
+        ],
+      ),
     );
   }
 }

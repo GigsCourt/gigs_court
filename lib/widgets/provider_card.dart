@@ -39,6 +39,40 @@ class ProviderCardData {
   bool get isTappable => isEarlyAccess || isFree || isSubscribed || isOwnProfile;
   bool get showOnlineStatus => isEarlyAccess || isSubscribed;
   bool get showVerifiedBadge => isEarlyAccess || isSubscribed;
+
+  ProviderCardData copyWith({
+    String? id,
+    String? name,
+    String? profileImage,
+    String? latestWorkPhoto,
+    List<String>? services,
+    double? rating,
+    int? reviewCount,
+    double? distanceKm,
+    bool? isSubscribed,
+    bool? isFree,
+    bool? isOnline,
+    String? lastSeen,
+    bool? isEarlyAccess,
+    bool? isOwnProfile,
+  }) {
+    return ProviderCardData(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      profileImage: profileImage ?? this.profileImage,
+      latestWorkPhoto: latestWorkPhoto ?? this.latestWorkPhoto,
+      services: services ?? this.services,
+      rating: rating ?? this.rating,
+      reviewCount: reviewCount ?? this.reviewCount,
+      distanceKm: distanceKm ?? this.distanceKm,
+      isSubscribed: isSubscribed ?? this.isSubscribed,
+      isFree: isFree ?? this.isFree,
+      isOnline: isOnline ?? this.isOnline,
+      lastSeen: lastSeen ?? this.lastSeen,
+      isEarlyAccess: isEarlyAccess ?? this.isEarlyAccess,
+      isOwnProfile: isOwnProfile ?? this.isOwnProfile,
+    );
+  }
 }
 
 class ProviderCard extends StatelessWidget {

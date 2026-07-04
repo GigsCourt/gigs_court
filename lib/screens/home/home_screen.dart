@@ -30,12 +30,11 @@ class _HomeScreenState extends State<HomeScreen> {
   double? _userLat;
   double? _userLng;
   StreamSubscription? _locationSubscription;
-  bool _isEarlyAccess = true;
+  StreamSubscription<QuerySnapshot>? _onlineStatusListener;
 
   @override
   void initState() {
     super.initState();
-    _isEarlyAccess = context.read<app_auth.AuthProvider>().isEarlyAccess;
     _scrollController.addListener(_onScroll);
     _getLocationAndLoad();
   }
@@ -43,6 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _locationSubscription?.cancel();
+    _onlineStatusListener?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -98,11 +98,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadProviders() async {
     if (_userLat == null || _userLng == null) return;
+    final isEarlyAccess = context.read<app_auth.AuthProvider>().isEarlyAccess;
     try {
       final nearbyData = await _supabase.rpc('find_all_providers', params: {'p_lat': _userLat, 'p_lng': _userLng});
       final nearbyUsers = List<Map<String, dynamic>>.from(nearbyData);
       if (nearbyUsers.isEmpty) {
         setState(() { _featuredProviders = []; _allProviders = []; _isLoading = false; });
+        _cancelOnlineStatusListener();
         return;
       }
 
@@ -133,9 +135,9 @@ class _HomeScreenState extends State<HomeScreen> {
           'name': userData['displayName'] ?? userData['name'] ?? 'Unknown',
           'profileImage': userData['photoUrl'] ?? userData['profileImage'] ?? '',
           'serviceIds': serviceIds,
-          'isSubscribed': _isEarlyAccess || isSubscribed,
-          'isFree': _isEarlyAccess || isFree,
-          'isOnline': _isEarlyAccess ? (userData['isOnline'] ?? false) : (isSubscribed && (userData['isOnline'] ?? false)),
+          'isSubscribed': isEarlyAccess || isSubscribed,
+          'isFree': isEarlyAccess || isFree,
+          'isOnline': isEarlyAccess ? (userData['isOnline'] ?? false) : (isSubscribed && (userData['isOnline'] ?? false)),
           'lastSeen': _formatLastSeen(userData['lastSeen']),
           'rating': (userData['averageRating'] ?? userData['rating'] ?? 0.0).toDouble(),
           'reviewCount': userData['reviewCount'] ?? 0,
@@ -164,7 +166,7 @@ class _HomeScreenState extends State<HomeScreen> {
           services: names, rating: p['rating'], reviewCount: p['reviewCount'],
           distanceKm: p['distanceKm'], isSubscribed: p['isSubscribed'],
           isFree: p['isFree'], isOnline: p['isOnline'], lastSeen: p['lastSeen'],
-          isEarlyAccess: _isEarlyAccess, isOwnProfile: p['isOwnProfile'],
+          isEarlyAccess: isEarlyAccess, isOwnProfile: p['isOwnProfile'],
         );
       }).toList();
 
@@ -185,9 +187,75 @@ class _HomeScreenState extends State<HomeScreen> {
         _allProviders = providers;
         _isLoading = false;
       });
+
+      _startOnlineStatusListener();
     } catch (e) {
       setState(() => _isLoading = false);
     }
+  }
+
+  void _cancelOnlineStatusListener() {
+    _onlineStatusListener?.cancel();
+    _onlineStatusListener = null;
+  }
+
+  void _startOnlineStatusListener() {
+    _cancelOnlineStatusListener();
+
+    final providerIds = _allProviders.map((p) => p.id).toList();
+    if (providerIds.isEmpty) return;
+
+    final batchIds = providerIds.length <= 30
+        ? providerIds
+        : providerIds.sublist(0, 30);
+
+    _onlineStatusListener = FirebaseFirestore.instance
+        .collection('users')
+        .where(FieldPath.documentId, whereIn: batchIds)
+        .snapshots()
+        .listen((snapshot) {
+      if (!mounted) return;
+      bool hasChanges = false;
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final docId = doc.id;
+        final isOnline = data['isOnline'] ?? false;
+        final lastSeen = _formatLastSeen(data['lastSeen']);
+
+        for (int i = 0; i < _featuredProviders.length; i++) {
+          if (_featuredProviders[i].id == docId) {
+            if (_featuredProviders[i].isOnline != isOnline ||
+                _featuredProviders[i].lastSeen != lastSeen) {
+              _featuredProviders[i] = _featuredProviders[i].copyWith(
+                isOnline: isOnline,
+                lastSeen: lastSeen,
+              );
+              hasChanges = true;
+            }
+            break;
+          }
+        }
+
+        for (int i = 0; i < _allProviders.length; i++) {
+          if (_allProviders[i].id == docId) {
+            if (_allProviders[i].isOnline != isOnline ||
+                _allProviders[i].lastSeen != lastSeen) {
+              _allProviders[i] = _allProviders[i].copyWith(
+                isOnline: isOnline,
+                lastSeen: lastSeen,
+              );
+              hasChanges = true;
+            }
+            break;
+          }
+        }
+      }
+
+      if (hasChanges && mounted) {
+        setState(() {});
+      }
+    });
   }
 
   String? _formatLastSeen(dynamic lastSeen) {
@@ -223,29 +291,42 @@ class _HomeScreenState extends State<HomeScreen> {
             ? _buildSkeletonGrid(crossAxisCount)
             : RefreshIndicator(
                 onRefresh: _loadProviders,
-                child: ListView(controller: _scrollController, padding: EdgeInsets.all(16.w), children: [
-                  if (_featuredProviders.isNotEmpty) ...[
-                    Text('Featured Providers', style: AppTextStyles.bodyLarge), SizedBox(height: 12.h),
-                    SizedBox(height: 160.h, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: _featuredProviders.length, itemBuilder: (context, index) {
-                      final p = _featuredProviders[index];
-                      return ProviderCard(provider: p, isHorizontal: true, onTap: () => context.push('/provider/${p.id}'));
-                    })),
-                    SizedBox(height: 24.h),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  controller: _scrollController,
+                  padding: EdgeInsets.all(16.w),
+                  children: [
+                    if (_featuredProviders.isNotEmpty) ...[
+                      Text('Featured Providers', style: AppTextStyles.bodyLarge), SizedBox(height: 12.h),
+                      SizedBox(height: 160.h, child: ListView.builder(scrollDirection: Axis.horizontal, itemCount: _featuredProviders.length, itemBuilder: (context, index) {
+                        final p = _featuredProviders[index];
+                        return ProviderCard(provider: p, isHorizontal: true, onTap: () => context.push('/provider/${p.id}', extra: {
+  'distanceKm': p.distanceKm,
+  'isOnline': p.isOnline,
+  'lastSeen': p.lastSeen,
+}));
+                      })),
+                      SizedBox(height: 24.h),
+                    ],
+                    Text('All Providers', style: AppTextStyles.bodyLarge), SizedBox(height: 12.h),
+                    if (_allProviders.isEmpty)
+                      Padding(padding: EdgeInsets.all(32.h), child: Center(child: Text('No providers found nearby.', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.5)))))
+                    else
+                      GridView.builder(
+                        shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: crossAxisCount, childAspectRatio: 0.72, crossAxisSpacing: 12.w, mainAxisSpacing: 12.h),
+                        itemCount: _allProviders.length,
+                        itemBuilder: (context, index) {
+                          final p = _allProviders[index];
+                          return ProviderCard(provider: p, onTap: () => context.push('/provider/${p.id}', extra: {
+  'distanceKm': p.distanceKm,
+  'isOnline': p.isOnline,
+  'lastSeen': p.lastSeen,
+}));
+                        },
+                      ),
                   ],
-                  Text('All Providers', style: AppTextStyles.bodyLarge), SizedBox(height: 12.h),
-                  if (_allProviders.isEmpty)
-                    Padding(padding: EdgeInsets.all(32.h), child: Center(child: Text('No providers found nearby.', style: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.5)))))
-                  else
-                    GridView.builder(
-                      shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: crossAxisCount, childAspectRatio: 0.72, crossAxisSpacing: 12.w, mainAxisSpacing: 12.h),
-                      itemCount: _allProviders.length,
-                      itemBuilder: (context, index) {
-                        final p = _allProviders[index];
-                        return ProviderCard(provider: p, onTap: () => context.push('/provider/${p.id}'));
-                      },
-                    ),
-                ]),
+                ),
               ),
         if (_showScrollToTop)
           Positioned(bottom: 20.h, right: 20.w, child: FloatingActionButton.small(

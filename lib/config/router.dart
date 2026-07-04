@@ -12,6 +12,7 @@ import '../screens/profile/edit_profile_screen.dart';
 import '../screens/chat/chat_conversation_screen.dart';
 import '../screens/notifications/notifications_screen.dart';
 import '../screens/settings/settings_screen.dart';
+import '../screens/settings/help_support_screen.dart';
 import '../screens/reviews/reviews_screen.dart';
 import '../screens/saved/saved_providers_screen.dart';
 import '../screens/subscription/subscription_screen.dart';
@@ -33,7 +34,13 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/notifications', builder: (context, state) => const NotificationsScreen()),
     GoRoute(path: '/provider/:id', builder: (context, state) {
       final id = state.pathParameters['id']!;
-      return ProviderProfileScreen(providerId: id);
+      final extra = state.extra as Map<String, dynamic>?;
+      return ProviderProfileScreen(
+        providerId: id,
+        initialDistanceKm: extra?['distanceKm'] as double?,
+        initialIsOnline: extra?['isOnline'] as bool?,
+        initialLastSeen: extra?['lastSeen'] as String?,
+      );
     }),
     GoRoute(path: '/chat/:chatId', builder: (context, state) {
       final chatId = state.pathParameters['chatId']!;
@@ -41,6 +48,7 @@ final GoRouter appRouter = GoRouter(
       return ChatConversationScreen(chatId: chatId, otherUserId: extra['otherUserId'] as String, otherUserName: extra['otherUserName'] as String);
     }),
     GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
+    GoRoute(path: '/help-support', builder: (context, state) => const HelpSupportScreen()),
     GoRoute(path: '/edit-profile', builder: (context, state) => const EditProfileScreen()),
     GoRoute(path: '/reviews/:userId', builder: (context, state) {
       final userId = state.pathParameters['userId']!;

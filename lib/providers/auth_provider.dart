@@ -23,11 +23,24 @@ class AuthProvider extends ChangeNotifier {
 
   AuthProvider() {
     _auth.authStateChanges().listen(_onAuthStateChanged);
+    _listenToEarlyAccess();
   }
 
   void setEarlyAccess(bool value) {
     _isEarlyAccess = value;
     notifyListeners();
+  }
+
+  void _listenToEarlyAccess() {
+    _firestore.collection('app_config').doc('global').snapshots().listen((doc) {
+      if (doc.exists) {
+        final value = doc.data()?['earlyAccessEnabled'] ?? true;
+        if (_isEarlyAccess != value) {
+          _isEarlyAccess = value;
+          notifyListeners();
+        }
+      }
+    });
   }
 
   Future<void> _onAuthStateChanged(User? user) async {
