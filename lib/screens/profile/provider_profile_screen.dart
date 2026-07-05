@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import '../../config/theme.dart';
 import '../../providers/auth_provider.dart' as app_auth;
+import '../../services/display_name_service.dart';
 
 class ProviderProfileScreen extends StatefulWidget {
   final String providerId;
@@ -271,7 +272,6 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
   }
 
   Future<void> _rateProvider() async {
-    final isEarlyAccess = context.read<app_auth.AuthProvider>().isEarlyAccess;
     int rating = 0;
     final commentController = TextEditingController();
     final result = await showDialog<bool>(
@@ -325,6 +325,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
       ),
     );
     if (result != true || rating == 0 || _currentUser == null) return;
+    final clientName = await DisplayNameService.getDisplayName(_currentUser.uid);
     final existingReview = await FirebaseFirestore.instance
         .collection('reviews')
         .where('providerId', isEqualTo: widget.providerId)
@@ -340,7 +341,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
       await FirebaseFirestore.instance.collection('reviews').add({
         'providerId': widget.providerId,
         'clientId': _currentUser.uid,
-        'clientName': _currentUser.displayName ?? 'Client',
+        'clientName': clientName,
         'rating': rating,
         'comment': commentController.text.trim(),
         'createdAt': FieldValue.serverTimestamp(),
@@ -364,9 +365,13 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
       'reviewCount': allReviews.docs.length,
       'lastReviewedAt': FieldValue.serverTimestamp(),
     });
-    if (!isEarlyAccess) {
-      _sendReviewNotification(widget.providerId, allReviews.docs.length);
-    }
+    _sendReviewNotification(
+      widget.providerId,
+      allReviews.docs.length,
+      clientName,
+      rating,
+      commentController.text.trim(),
+    );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -430,6 +435,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
 
   Future<void> _sendLeadNotification(
       String providerId, int leadCount) async {
+    final remaining = 10 - leadCount;
     final milestones = {
       1: 'First Lead! 🎉',
       5: '5 Leads Used',
@@ -437,9 +443,9 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
       10: 'Limit Reached',
     };
     final bodies = {
-      1: 'Someone just contacted you. You have 9 free leads remaining.',
-      5: 'You\'re halfway through your free leads. 5 remaining.',
-      8: 'You\'ve used 8 of 10 free leads. 2 remaining before you need to subscribe.',
+      1: 'Someone just contacted you. You have $remaining free leads remaining.',
+      5: 'You\'re halfway through your free leads. $remaining leads remaining.',
+      8: 'You have $remaining free leads remaining before you need to subscribe.',
       10: 'You\'ve used all 10 free leads. Subscribe to GigsCourt Premium to continue receiving clients.',
     };
     if (milestones.containsKey(leadCount)) {
@@ -459,31 +465,38 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
   }
 
   Future<void> _sendReviewNotification(
-      String providerId, int reviewCount) async {
-    final milestones = {
-      1: 'First Review! ⭐',
-      3: '3 Reviews Received',
-      5: 'Review Milestone Reached',
-    };
-    final bodies = {
-      1: 'A client left you a review. You now have 1 of 5 reviews needed for free tier.',
-      3: 'You\'re over halfway. 2 more reviews before you need to subscribe.',
-      5: 'You\'ve received 5 reviews. Subscribe to GigsCourt Premium to keep your profile visible.',
-    };
-    if (milestones.containsKey(reviewCount)) {
-      await FirebaseFirestore.instance
+      String providerId, int reviewCount, String clientName, int rating, String comment) async {
+    final remaining = 5 - reviewCount;
+    final stars = '⭐' * rating;
+    final reviewText = comment.isNotEmpty ? ": '$comment'" : '';
+
+    bool isSubscribed = false;
+    try {
+      final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(providerId)
-          .collection('notifications')
-          .add({
-        'type': reviewCount >= 5 ? 'review_limit' : 'review_milestone',
-        'title': milestones[reviewCount]!,
-        'body': bodies[reviewCount]!,
-        'read': false,
-        'data': {},
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    }
+          .get();
+      if (doc.exists) {
+        isSubscribed = doc.data()?['isSubscribed'] == true;
+      }
+    } catch (_) {}
+
+    final body = isSubscribed
+        ? '$clientName rated you $stars$reviewText'
+        : '$clientName rated you $stars$reviewText. You have $remaining free reviews remaining.';
+
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(providerId)
+        .collection('notifications')
+        .add({
+      'type': isSubscribed ? 'review' : (reviewCount >= 5 ? 'review_limit' : 'review_milestone'),
+      'title': 'New Review! ⭐',
+      'body': body,
+      'read': false,
+      'data': {},
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 
   void _viewPhoto(int index) {

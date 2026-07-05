@@ -15,6 +15,7 @@ import 'package:provider/provider.dart';
 import '../../config/theme.dart';
 import '../../services/imagekit_service.dart';
 import '../../providers/auth_provider.dart' as app_auth;
+import '../../services/display_name_service.dart';
 
 class ChatConversationScreen extends StatefulWidget {
   final String chatId;
@@ -106,8 +107,11 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   void _listenToTyping() {
     _messageController.addListener(() {
-      if (_messageController.text.isNotEmpty && !_isTyping) _setTyping(true);
-      else if (_messageController.text.isEmpty && _isTyping) _setTyping(false);
+      if (_messageController.text.isNotEmpty && !_isTyping) {
+        _setTyping(true);
+      } else if (_messageController.text.isEmpty && _isTyping) {
+        _setTyping(false);
+      }
     });
   }
 
@@ -158,7 +162,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     });
 
     if (text != null) { _messageController.clear(); _setTyping(false); }
-    final displayName = _currentUser!.displayName ?? 'Someone';
+    final displayName = await DisplayNameService.getDisplayName(_currentUser.uid);
     final preview = lastMessage.length > 80 ? '${lastMessage.substring(0, 80)}...' : lastMessage;
     await FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).collection('notifications').add({
       'type': 'message',
@@ -167,7 +171,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       'read': false,
       'data': {
         'chatId': widget.chatId,
-        'otherUserId': _currentUser!.uid,
+        'otherUserId': _currentUser.uid,
         'otherUserName': displayName,
       },
       'createdAt': FieldValue.serverTimestamp(),
@@ -280,10 +284,15 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   void _cycleSpeed() {
     setState(() {
-      if (_playbackSpeed >= 2.0) _playbackSpeed = 0.5;
-      else if (_playbackSpeed >= 1.5) _playbackSpeed = 2.0;
-      else if (_playbackSpeed >= 1.0) _playbackSpeed = 1.5;
-      else _playbackSpeed = 1.0;
+      if (_playbackSpeed >= 2.0) {
+        _playbackSpeed = 0.5;
+      } else if (_playbackSpeed >= 1.5) {
+        _playbackSpeed = 2.0;
+      } else if (_playbackSpeed >= 1.0) {
+        _playbackSpeed = 1.5;
+      } else {
+        _playbackSpeed = 1.0;
+      }
     });
     _audioPlayer.setPlaybackRate(_playbackSpeed);
   }
@@ -355,12 +364,35 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     final controller = TextEditingController();
     final result = await showDialog<bool>(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDialogState) => AlertDialog(title: Text('Rate Provider', style: AppTextStyles.bodyLarge), content: Column(mainAxisSize: MainAxisSize.min, children: [Row(mainAxisAlignment: MainAxisAlignment.center, children: List.generate(5, (i) => IconButton(icon: Icon(i < rating ? Icons.star : Icons.star_border, color: Colors.amber, size: 36.sp), onPressed: () => setDialogState(() => rating = i + 1)))), SizedBox(height: 12.h), TextField(controller: controller, maxLines: 3, decoration: InputDecoration(hintText: 'Share your experience (optional)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.r))))]), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), TextButton(onPressed: () { if (rating > 0) Navigator.pop(ctx, true); }, child: Text('Submit', style: TextStyle(color: AppColors.primary)))])));
     if (result == true && rating > 0 && _currentUser != null) {
+      final clientName = await DisplayNameService.getDisplayName(_currentUser.uid);
       final existing = await FirebaseFirestore.instance.collection('reviews').where('providerId', isEqualTo: widget.otherUserId).where('clientId', isEqualTo: _currentUser.uid).get();
       if (existing.docs.isNotEmpty) {
         await existing.docs.first.reference.update({'rating': rating, 'comment': controller.text.trim(), 'createdAt': FieldValue.serverTimestamp()});
       } else {
-        await FirebaseFirestore.instance.collection('reviews').add({'providerId': widget.otherUserId, 'clientId': _currentUser.uid, 'clientName': _currentUser.displayName ?? 'Client', 'rating': rating, 'comment': controller.text.trim(), 'createdAt': FieldValue.serverTimestamp()});
+        await FirebaseFirestore.instance.collection('reviews').add({'providerId': widget.otherUserId, 'clientId': _currentUser.uid, 'clientName': clientName, 'rating': rating, 'comment': controller.text.trim(), 'createdAt': FieldValue.serverTimestamp()});
       }
+      final allReviews = await FirebaseFirestore.instance.collection('reviews').where('providerId', isEqualTo: widget.otherUserId).get();
+      bool isSubscribed = false;
+      try {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).get();
+        if (doc.exists) {
+          isSubscribed = doc.data()?['isSubscribed'] == true;
+        }
+      } catch (_) {}
+      final remaining = 5 - allReviews.docs.length;
+      final stars = '⭐' * rating;
+      final reviewText = controller.text.trim().isNotEmpty ? ": '${controller.text.trim()}'" : '';
+      final body = isSubscribed
+          ? '$clientName rated you $stars$reviewText'
+          : '$clientName rated you $stars$reviewText. You have $remaining free reviews remaining.';
+      await FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).collection('notifications').add({
+        'type': isSubscribed ? 'review' : 'review_milestone',
+        'title': 'New Review! ⭐',
+        'body': body,
+        'read': false,
+        'data': {},
+        'createdAt': FieldValue.serverTimestamp(),
+      });
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Review submitted!'), backgroundColor: AppColors.success));
     }
   }
@@ -386,58 +418,58 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        leading: Row(
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_new, size: 20.sp),
+          onPressed: () => context.pop(),
+        ),
+        title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: Icon(Icons.arrow_back_ios_new, size: 20.sp),
-              onPressed: () => context.pop(),
-            ),
             GestureDetector(
               onTap: _isOtherSubscribed ? () => context.push('/provider/${widget.otherUserId}') : null,
-              child: Padding(
-                padding: EdgeInsets.only(left: 4.w),
-                child: FutureBuilder<DocumentSnapshot?>(
-                  future: FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).get(),
-                  builder: (context, snap) {
-                    final data = snap.data?.data() as Map<String, dynamic>?;
-                    final photoUrl = data?['profileImage'] ?? data?['photoUrl'];
-                    return ClipRRect(
-                      borderRadius: BorderRadius.circular(24.r),
-                      child: SizedBox(
-                        width: 36.w, height: 36.w,
-                        child: photoUrl != null && photoUrl.toString().isNotEmpty
-                            ? CachedNetworkImage(imageUrl: photoUrl, fit: BoxFit.cover)
-                            : Icon(Icons.person, color: AppColors.primary.withValues(alpha: 0.3)),
-                      ),
-                    );
-                  },
-                ),
+              child: FutureBuilder<DocumentSnapshot?>(
+                future: FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).get(),
+                builder: (context, snap) {
+                  final data = snap.data?.data() as Map<String, dynamic>?;
+                  final photoUrl = data?['profileImage'] ?? data?['photoUrl'];
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(24.r),
+                    child: SizedBox(
+                      width: 36.w, height: 36.w,
+                      child: photoUrl != null && photoUrl.toString().isNotEmpty
+                          ? CachedNetworkImage(imageUrl: photoUrl, fit: BoxFit.cover)
+                          : Icon(Icons.person, size: 20.sp, color: AppColors.primary.withValues(alpha: 0.3)),
+                    ),
+                  );
+                },
               ),
             ),
-          ],
-        ),
-        leadingWidth: 80.w,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(child: Text(widget.otherUserName, style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
-                if (showBadge) ...[SizedBox(width: 4.w), Icon(Icons.verified, size: 16.sp, color: Color(0xFF2196F3))],
-              ],
-            ),
-            StreamBuilder<DocumentSnapshot?>(
-              stream: FirebaseFirestore.instance.collection('chats').doc(widget.chatId).snapshots(),
-              builder: (context, snap) {
-                final data = snap.data?.data() as Map<String, dynamic>?;
-                final typing = data?['typing_${widget.otherUserId}'] == true;
-                return Text(
-                  typing ? 'typing...' : (_isOtherOnline ? 'Online' : 'Offline'),
-                  style: AppTextStyles.caption.copyWith(color: typing ? AppColors.primary : (_isOtherOnline ? AppColors.success : AppColors.grey)),
-                );
-              },
+            SizedBox(width: 8.w),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(child: Text(widget.otherUserName, style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                      if (showBadge) ...[SizedBox(width: 4.w), Icon(Icons.verified, size: 14.sp, color: Color(0xFF2196F3))],
+                    ],
+                  ),
+                  StreamBuilder<DocumentSnapshot?>(
+                    stream: FirebaseFirestore.instance.collection('chats').doc(widget.chatId).snapshots(),
+                    builder: (context, snap) {
+                      final data = snap.data?.data() as Map<String, dynamic>?;
+                      final typing = data?['typing_${widget.otherUserId}'] == true;
+                      return Text(
+                        typing ? 'typing...' : (_isOtherOnline ? 'Online' : 'Offline'),
+                        style: AppTextStyles.caption.copyWith(color: typing ? AppColors.primary : (_isOtherOnline ? AppColors.success : AppColors.grey)),
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -446,12 +478,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               IconButton(
-                icon: Icon(Icons.star_outline, size: 20.sp),
+                icon: Icon(Icons.star_outline, size: 18.sp),
                 onPressed: _showReviewDialog,
                 padding: EdgeInsets.zero,
-                constraints: BoxConstraints(minWidth: 36.w, minHeight: 36.h),
+                constraints: BoxConstraints(minWidth: 32.w, minHeight: 32.h),
               ),
-              Text('Review', style: AppTextStyles.caption.copyWith(fontSize: 8.sp, color: AppColors.grey)),
+              FittedBox(child: Text('Review', style: AppTextStyles.caption.copyWith(fontSize: 8.sp, color: AppColors.grey))),
             ],
           ),
           SizedBox(width: 4.w),
@@ -489,7 +521,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 for (final key in keys) {
                   widgets.add(Padding(
                     padding: EdgeInsets.symmetric(vertical: 8.h),
-                    child: Center(child: Container(padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h), decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12.r)), child: Text(key, style: AppTextStyles.caption))),
+                    child: Center(child: Container(padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h), decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12.r)), child: FittedBox(child: Text(key, style: AppTextStyles.caption)))),
                   ));
                   for (final msg in grouped[key]!) { widgets.add(_buildMessage(msg)); }
                 }
@@ -625,9 +657,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(_formatTime(ts), style: AppTextStyles.caption.copyWith(fontSize: 9.sp)),
-                if (isMine) ...[SizedBox(width: 4.w), Text(status == 'read' ? 'Read' : status == 'delivered' ? 'Delivered' : 'Sent', style: AppTextStyles.caption.copyWith(fontSize: 9.sp, color: status == 'read' ? AppColors.success : AppColors.grey))],
-                if (isEdited) ...[SizedBox(width: 4.w), Text('edited', style: AppTextStyles.caption.copyWith(fontSize: 9.sp, fontStyle: FontStyle.italic))],
+                FittedBox(child: Text(_formatTime(ts), style: AppTextStyles.caption.copyWith(fontSize: 9.sp))),
+                if (isMine) ...[SizedBox(width: 4.w), FittedBox(child: Text(status == 'read' ? 'Read' : status == 'delivered' ? 'Delivered' : 'Sent', style: AppTextStyles.caption.copyWith(fontSize: 9.sp, color: status == 'read' ? AppColors.success : AppColors.grey)))],
+                if (isEdited) ...[SizedBox(width: 4.w), FittedBox(child: Text('edited', style: AppTextStyles.caption.copyWith(fontSize: 9.sp, fontStyle: FontStyle.italic)))],
               ],
             ),
           ],
@@ -688,9 +720,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   Widget _buildMessageBubble(String type, String text, String? imageUrl, String? voiceUrl, int? voiceDuration, bool isMine) {
     final bgColor = isMine ? AppColors.primary : AppColors.white;
     final textColor = isMine ? AppColors.white : AppColors.primary;
-    final borderRadius = isMine
-        ? BorderRadius.only(topLeft: Radius.circular(16.r), bottomLeft: Radius.circular(16.r), bottomRight: Radius.circular(4.r))
-        : BorderRadius.only(topRight: Radius.circular(16.r), bottomLeft: Radius.circular(4.r), bottomRight: Radius.circular(16.r));
+    final borderRadius = BorderRadius.only(
+      topLeft: Radius.circular(16.r),
+      topRight: Radius.circular(16.r),
+      bottomLeft: Radius.circular(isMine ? 16.r : 4.r),
+      bottomRight: Radius.circular(isMine ? 4.r : 16.r),
+    );
 
     if (type == 'image' && imageUrl != null) {
       return GestureDetector(
@@ -789,14 +824,14 @@ class _VoiceBubbleState extends State<_VoiceBubble> {
           ),
         ),
         SizedBox(width: 6.w),
-        Text(_fmt(_position), style: AppTextStyles.caption.copyWith(fontSize: 10.sp, color: textColor)),
+        FittedBox(child: Text(_fmt(_position), style: AppTextStyles.caption.copyWith(fontSize: 10.sp, color: textColor))),
         SizedBox(width: 4.w),
         GestureDetector(
           onTap: widget.onSpeedCycle,
           child: Container(
             padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 2.h),
             decoration: BoxDecoration(color: textColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4.r)),
-            child: Text('${widget.playbackSpeed}x', style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w600, color: textColor)),
+            child: FittedBox(child: Text('${widget.playbackSpeed}x', style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w600, color: textColor))),
           ),
         ),
       ])),

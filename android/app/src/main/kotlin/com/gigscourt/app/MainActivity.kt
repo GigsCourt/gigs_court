@@ -1,4 +1,4 @@
-package com.example.gigs_court
+package com.gigscourt.app
 
 import io.flutter.embedding.android.FlutterActivity
 

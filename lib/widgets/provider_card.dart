@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/theme.dart';
 
 class ProviderCardData {
@@ -110,7 +111,20 @@ class ProviderCard extends StatelessWidget {
         content: Text('This provider is currently not accepting new clients.', style: AppTextStyles.bodyMedium),
         actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
       ),
-    );
+    ).then((_) {
+      FirebaseFirestore.instance
+          .collection('users')
+          .doc(provider.id)
+          .collection('notifications')
+          .add({
+        'type': 'missed_connection',
+        'title': 'Missed Connection',
+        'body': 'A potential client tried to view your profile but couldn\'t. Please subscribe to keep accepting clients.',
+        'read': false,
+        'data': {},
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    });
   }
 
   Widget _buildPhotoSection({double? height}) {
@@ -126,14 +140,12 @@ class ProviderCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Work photo or fallback
             if (hasWorkPhoto)
               Image.network(provider.latestWorkPhoto!, fit: BoxFit.cover)
             else if (provider.profileImage.isNotEmpty)
               Image.network(provider.profileImage, fit: BoxFit.cover)
             else
               Icon(Icons.person, size: 36.sp, color: AppColors.primary.withValues(alpha: 0.3)),
-            // Profile photo circle top-left (only when work photo is shown)
             if (hasWorkPhoto)
               Positioned(
                 top: 8.h,
@@ -154,7 +166,6 @@ class ProviderCard extends StatelessWidget {
                       : null,
                 ),
               ),
-            // Lock overlay
             if (provider.isLocked)
               Container(
                 color: Colors.black.withValues(alpha: 0.4),
