@@ -3,7 +3,6 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../home/home_screen.dart';
-import '../search/search_screen.dart';
 import '../chat/chat_list_screen.dart';
 import '../profile/own_profile_screen.dart';
 import '../admin/admin_screen.dart';
@@ -70,11 +69,6 @@ class _MainShellState extends State<MainShell> {
         label: 'Home',
       ),
       NavigationDestination(
-        icon: Icon(Icons.search_outlined, size: 22.sp),
-        selectedIcon: Icon(Icons.search, size: 22.sp),
-        label: 'Search',
-      ),
-      NavigationDestination(
         icon: _buildChatIcon(Icons.chat_bubble_outline),
         selectedIcon: _buildChatIcon(Icons.chat_bubble),
         label: 'Chat',
@@ -94,7 +88,6 @@ class _MainShellState extends State<MainShell> {
 
     final screens = <Widget>[
       const HomeScreen(),
-      const SearchScreen(),
       const ChatListScreen(),
       const OwnProfileScreen(),
       if (_isAdmin) const AdminScreen(),
