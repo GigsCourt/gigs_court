@@ -17,35 +17,65 @@ class SubscriptionScreen extends StatefulWidget {
 
 class _SubscriptionScreenState extends State<SubscriptionScreen> {
   bool _isLoading = false;
-  bool _isLoadingPrice = true;
+  bool _isLoadingData = true;
   int _basePrice = 0;
   int _selectedTier = 0;
+  bool _isSubscribed = false;
+  Timestamp? _subscriptionExpiry;
+  int _subscriptionTier = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadPrice();
+    _loadData();
   }
 
-  Future<void> _loadPrice() async {
+  Future<void> _loadData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _isLoadingData = false);
+      return;
+    }
+
     try {
+      // Load price from config
       final configDoc = await FirebaseFirestore.instance
           .collection('app_config')
           .doc('global')
           .get();
-      if (configDoc.exists) {
-        final data = configDoc.data()!;
-        if (mounted) {
-          setState(() {
-            _basePrice = (data['subscriptionPriceNGN'] ?? 0) as int;
-            _isLoadingPrice = false;
-          });
-        }
-      } else {
-        if (mounted) setState(() => _isLoadingPrice = false);
+
+      // Load user subscription status
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (mounted) {
+        setState(() {
+          if (configDoc.exists) {
+            _basePrice = (configDoc.data()?['subscriptionPriceNGN'] ?? 0) as int;
+          }
+
+          if (userDoc.exists) {
+            final data = userDoc.data()!;
+            _isSubscribed = data['isSubscribed'] == true;
+            _subscriptionExpiry = data['subscriptionExpiry'] as Timestamp?;
+            _subscriptionTier = (data['subscriptionTier'] ?? 0) as int;
+
+            // Check if subscription has expired
+            if (_isSubscribed && _subscriptionExpiry != null) {
+              final expiryDate = _subscriptionExpiry!.toDate();
+              if (DateTime.now().isAfter(expiryDate)) {
+                _isSubscribed = false;
+              }
+            }
+          }
+
+          _isLoadingData = false;
+        });
       }
     } catch (_) {
-      if (mounted) setState(() => _isLoadingPrice = false);
+      if (mounted) setState(() => _isLoadingData = false);
     }
   }
 
@@ -81,6 +111,14 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   String _formatPrice(int price) {
     return price.toString().replaceAllMapped(
         RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+  }
+
+  String _formatDate(DateTime date) {
+    final months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${date.day} ${months[date.month - 1]} ${date.year}';
   }
 
   Future<void> _subscribe() async {
@@ -130,7 +168,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 backgroundColor: AppColors.success,
               ),
             );
-            context.pop();
+            // Reload to show active status
+            _loadData();
           }
         }
       } else {
@@ -160,7 +199,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoadingPrice) {
+    if (_isLoadingData) {
       return Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
@@ -183,6 +222,68 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       );
     }
 
+    // Active subscription view
+    if (_isSubscribed) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+            title: Text('GigsCourt Premium', style: AppTextStyles.headline3)),
+        body: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.all(24.w),
+            child: Column(
+              children: [
+                Icon(Icons.verified, size: 56.sp, color: AppColors.success),
+                SizedBox(height: 12.h),
+                Text('You\'re Subscribed!', style: AppTextStyles.headline1),
+                SizedBox(height: 8.h),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12.r),
+                  ),
+                  child: Text(
+                    _subscriptionExpiry != null
+                        ? 'Active until ${_formatDate(_subscriptionExpiry!.toDate())}'
+                        : 'Active',
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                SizedBox(height: 24.h),
+                ...['Unlimited client leads',
+                  'Verified badge on your profile',
+                  'Priority ranking in search',
+                  'Appear in Featured section',
+                  'Online status visible to clients',
+                ].map((b) => Padding(
+                      padding: EdgeInsets.only(bottom: 8.h),
+                      child: Row(
+                        children: [
+                          Icon(Icons.check_circle,
+                              color: AppColors.success, size: 18.sp),
+                          SizedBox(width: 8.w),
+                          Text(b, style: AppTextStyles.bodySmall),
+                        ],
+                      ),
+                    )),
+                const Spacer(),
+                Text(
+                  'Your subscription does not auto-renew.',
+                  style: AppTextStyles.caption,
+                ),
+                SizedBox(height: 16.h),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Subscription options view
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -205,7 +306,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               ),
               SizedBox(height: 24.h),
 
-              // Tier cards
               ...List.generate(_tiers.length, (i) {
                 final tier = _tiers[i];
                 final isSelected = _selectedTier == i;
@@ -233,8 +333,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                               ? Icons.radio_button_checked
                               : Icons.radio_button_off,
                           size: 22.sp,
-                          color:
-                              isSelected ? AppColors.primary : AppColors.grey,
+                          color: isSelected ? AppColors.primary : AppColors.grey,
                         ),
                         SizedBox(width: 12.w),
                         Expanded(
@@ -271,7 +370,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
               SizedBox(height: 16.h),
 
-              // Benefits
               ...[
                 'Unlimited client leads',
                 'Verified badge on your profile',
