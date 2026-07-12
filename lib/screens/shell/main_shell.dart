@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../home/home_screen.dart';
 import '../chat/chat_list_screen.dart';
 import '../profile/own_profile_screen.dart';
+import '../subscription/test_subscribe_screen.dart';
 import '../admin/admin_screen.dart';
 import '../../config/theme.dart';
 
@@ -78,6 +79,11 @@ class _MainShellState extends State<MainShell> {
         selectedIcon: _buildProfileIcon(),
         label: 'Profile',
       ),
+      NavigationDestination(
+        icon: Icon(Icons.payment_outlined, size: 22.sp),
+        selectedIcon: Icon(Icons.payment, size: 22.sp),
+        label: 'Subscribe',
+      ),
       if (_isAdmin)
         NavigationDestination(
           icon: Icon(Icons.shield_outlined, size: 22.sp),
@@ -90,6 +96,7 @@ class _MainShellState extends State<MainShell> {
       const HomeScreen(),
       const ChatListScreen(),
       const OwnProfileScreen(),
+      const TestSubscribeScreen(),
       if (_isAdmin) const AdminScreen(),
     ];
 
