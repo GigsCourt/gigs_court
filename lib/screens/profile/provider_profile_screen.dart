@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../config/theme.dart';
 import '../../providers/auth_provider.dart' as app_auth;
 import '../../services/display_name_service.dart';
@@ -42,9 +43,10 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
   String _providerAddress = '';
   bool _isOnline = false;
   String? _lastSeen;
-  StreamSubscription<DocumentSnapshot>? _onlineStatusListener;
+  StreamSubscription<DocumentSnapshot>? _profileListener;
 
-  bool get _showAppBarPhoto => _scrollController.hasClients && _scrollController.offset > 140.h;
+  bool get _showAppBarPhoto =>
+      _scrollController.hasClients && _scrollController.offset > 140.h;
 
   @override
   void initState() {
@@ -53,12 +55,12 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
     _isOnline = widget.initialIsOnline ?? false;
     _lastSeen = widget.initialLastSeen;
     _scrollController.addListener(_onScroll);
-    _loadProfile();
+    _startProfileListener();
   }
 
   @override
   void dispose() {
-    _onlineStatusListener?.cancel();
+    _profileListener?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -72,17 +74,18 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
     }
   }
 
-  Future<void> _loadProfile() async {
-    try {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.providerId)
-          .get();
-      if (!userDoc.exists) {
-        setState(() => _isLoading = false);
+  void _startProfileListener() {
+    _profileListener?.cancel();
+    _profileListener = FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.providerId)
+        .snapshots()
+        .listen((doc) async {
+      if (!mounted || !doc.exists) {
+        if (mounted) setState(() => _isLoading = false);
         return;
       }
-      final userData = userDoc.data()!;
+      final userData = doc.data()!;
 
       _isOnline = widget.initialIsOnline ?? userData['isOnline'] ?? false;
       _lastSeen = widget.initialLastSeen;
@@ -115,26 +118,28 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
         }
       }
 
-      setState(() {
-        _userData = userData;
-        _services = services;
-        _workPhotos = List<String>.from(userData['workPhotos'] ?? []);
-        _isSaved = isSaved;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _userData = userData;
+          _services = services;
+          _workPhotos = List<String>.from(userData['workPhotos'] ?? []);
+          _isSaved = isSaved;
+          _isLoading = false;
+        });
+      }
 
-      _loadAddress();
-      _startOnlineStatusListener();
-    } catch (e) {
-      setState(() => _isLoading = false);
-    }
+      // Load address if not already loaded
+      if (_providerAddress.isEmpty) {
+        _loadAddress();
+      }
+    });
   }
 
   Future<void> _loadAddress() async {
     try {
       final locationData = await _supabase
           .from('provider_locations')
-          .select('address')
+          .select('address, latitude, longitude')
           .eq('provider_id', widget.providerId)
           .maybeSingle();
       if (locationData != null && mounted) {
@@ -145,22 +150,14 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
     } catch (_) {}
   }
 
-  void _startOnlineStatusListener() {
-    _onlineStatusListener?.cancel();
-    _onlineStatusListener = FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.providerId)
-        .snapshots()
-        .listen((doc) {
-      if (!mounted || !doc.exists) return;
-      final data = doc.data();
-      if (data != null) {
-        setState(() {
-          _isOnline = data['isOnline'] ?? false;
-          _lastSeen = _formatLastSeen(data['lastSeen']);
-        });
-      }
-    });
+  Future<void> _openDirections() async {
+    if (_providerAddress.isEmpty) return;
+    final encodedAddress = Uri.encodeComponent(_providerAddress);
+    final url = Uri.parse(
+        'https://www.google.com/maps/dir/?api=1&destination=$encodedAddress');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
   }
 
   Future<void> _toggleSave() async {
@@ -240,9 +237,10 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
       'unreadCount': <String, int>{},
     });
 
-    await FirebaseFirestore.instance.collection('app_config').doc('global').set({
-      'totalChats': FieldValue.increment(1),
-    }, SetOptions(merge: true));
+    await FirebaseFirestore.instance
+        .collection('app_config')
+        .doc('global')
+        .set({'totalChats': FieldValue.increment(1)}, SetOptions(merge: true));
 
     if (!isEarlyAccess) {
       final existingLeads = await FirebaseFirestore.instance
@@ -325,7 +323,8 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
       ),
     );
     if (result != true || rating == 0 || _currentUser == null) return;
-    final clientName = await DisplayNameService.getDisplayName(_currentUser.uid);
+    final clientName =
+        await DisplayNameService.getDisplayName(_currentUser.uid);
     final existingReview = await FirebaseFirestore.instance
         .collection('reviews')
         .where('providerId', isEqualTo: widget.providerId)
@@ -464,8 +463,8 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
     }
   }
 
-  Future<void> _sendReviewNotification(
-      String providerId, int reviewCount, String clientName, int rating, String comment) async {
+  Future<void> _sendReviewNotification(String providerId, int reviewCount,
+      String clientName, int rating, String comment) async {
     final remaining = 5 - reviewCount;
     final stars = '⭐' * rating;
     final reviewText = comment.isNotEmpty ? ": '$comment'" : '';
@@ -490,7 +489,9 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
         .doc(providerId)
         .collection('notifications')
         .add({
-      'type': isSubscribed ? 'review' : (reviewCount >= 5 ? 'review_limit' : 'review_milestone'),
+      'type': isSubscribed
+          ? 'review'
+          : (reviewCount >= 5 ? 'review_limit' : 'review_milestone'),
       'title': 'New Review! ⭐',
       'body': body,
       'read': false,
@@ -544,25 +545,19 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
         backgroundColor: AppColors.background,
         appBar: AppBar(),
         body: Center(
-          child: Text(
-            'Provider not found.',
-            style: AppTextStyles.bodyMedium,
-          ),
+          child: Text('Provider not found.', style: AppTextStyles.bodyMedium),
         ),
       );
     }
 
     final isEarlyAccess = context.watch<app_auth.AuthProvider>().isEarlyAccess;
-    final name =
-        _userData!['displayName'] ?? _userData!['name'] ?? 'Unknown';
-    final photoUrl =
-        _userData!['profileImage'] ?? _userData!['photoUrl'];
+    final name = _userData!['displayName'] ?? _userData!['name'] ?? 'Unknown';
+    final photoUrl = _userData!['profileImage'] ?? _userData!['photoUrl'];
     final bio = _userData!['bio'] ?? '';
     final isSubscribed = _userData!['isSubscribed'] == true;
     final showBadge = isEarlyAccess || isSubscribed;
-    final rating = (_userData!['rating'] ??
-            _userData!['averageRating'] ??
-            0.0)
+    final showPremiumFeatures = isEarlyAccess || isSubscribed;
+    final rating = (_userData!['rating'] ?? _userData!['averageRating'] ?? 0.0)
         .toDouble();
     final reviewCount = _userData!['reviewCount'] ?? 0;
     final isOwnProfile = _currentUser?.uid == widget.providerId;
@@ -579,7 +574,9 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
             title: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (showAppBarPhoto && photoUrl != null && photoUrl.toString().isNotEmpty) ...[
+                if (showAppBarPhoto &&
+                    photoUrl != null &&
+                    photoUrl.toString().isNotEmpty) ...[
                   ClipRRect(
                     borderRadius: BorderRadius.circular(16.r),
                     child: Image.network(
@@ -627,12 +624,10 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                             : Container(
                                 color: AppColors.primary
                                     .withValues(alpha: 0.06),
-                                child: Icon(
-                                  Icons.person,
-                                  size: 60.sp,
-                                  color: AppColors.primary
-                                      .withValues(alpha: 0.3),
-                                ),
+                                child: Icon(Icons.person,
+                                    size: 60.sp,
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.3)),
                               ),
                       ),
                     ),
@@ -642,11 +637,9 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Flexible(
-                      child: Text(
-                        name,
-                        style: AppTextStyles.headline2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: Text(name,
+                          style: AppTextStyles.headline2,
+                          overflow: TextOverflow.ellipsis),
                     ),
                     if (showBadge) ...[
                       SizedBox(width: 6.w),
@@ -664,17 +657,14 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                         width: 8.w,
                         height: 8.w,
                         decoration: BoxDecoration(
-                          color: _isOnline
-                              ? AppColors.success
-                              : AppColors.grey,
+                          color:
+                              _isOnline ? AppColors.success : AppColors.grey,
                           shape: BoxShape.circle,
                         ),
                       ),
                       SizedBox(width: 4.w),
                       Text(
-                        _isOnline
-                            ? 'Online now'
-                            : _lastSeen ?? 'Offline',
+                        _isOnline ? 'Online now' : _lastSeen ?? 'Offline',
                         style: AppTextStyles.bodySmall.copyWith(
                           color: _isOnline
                               ? AppColors.success
@@ -714,10 +704,8 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                     runSpacing: 8.h,
                     children: _services
                         .map((s) => Chip(
-                              label: Text(
-                                s['name'] ?? '',
-                                style: AppTextStyles.bodySmall,
-                              ),
+                              label: Text(s['name'] ?? '',
+                                  style: AppTextStyles.bodySmall),
                               backgroundColor: AppColors.primary
                                   .withValues(alpha: 0.08),
                               side: BorderSide.none,
@@ -730,19 +718,15 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.location_on_outlined,
-                        size: 16.sp,
-                        color:
-                            AppColors.primary.withValues(alpha: 0.5),
-                      ),
+                      Icon(Icons.location_on_outlined,
+                          size: 16.sp,
+                          color: AppColors.primary.withValues(alpha: 0.5)),
                       SizedBox(width: 4.w),
                       Flexible(
                         child: Text(
                           _providerAddress,
                           style: AppTextStyles.bodySmall.copyWith(
-                            color:
-                                AppColors.primary.withValues(alpha: 0.7),
+                            color: AppColors.primary.withValues(alpha: 0.7),
                           ),
                           textAlign: TextAlign.center,
                         ),
@@ -752,27 +736,37 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                   SizedBox(height: 8.h),
                 ],
                 if (_distanceKm != null)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.straighten,
-                        size: 16.sp,
-                        color:
-                            AppColors.primary.withValues(alpha: 0.5),
-                      ),
-                      SizedBox(width: 4.w),
-                      Text(
-                        '${_distanceKm!.toStringAsFixed(1)} km away',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color:
-                              AppColors.primary.withValues(alpha: 0.7),
+                  GestureDetector(
+                    onTap: showPremiumFeatures ? _openDirections : null,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          showPremiumFeatures
+                              ? Icons.directions
+                              : Icons.straighten,
+                          size: 16.sp,
+                          color: showPremiumFeatures
+                              ? AppColors.primary
+                              : AppColors.primary.withValues(alpha: 0.5),
                         ),
-                      ),
-                    ],
+                        SizedBox(width: 4.w),
+                        Text(
+                          '${_distanceKm!.toStringAsFixed(1)} km away${showPremiumFeatures ? " — Get directions" : ""}',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: showPremiumFeatures
+                                ? AppColors.primary
+                                : AppColors.primary.withValues(alpha: 0.7),
+                            decoration: showPremiumFeatures
+                                ? TextDecoration.underline
+                                : null,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 SizedBox(height: 20.h),
-                if (!isOwnProfile) ...[
+                if (!isOwnProfile && showPremiumFeatures) ...[
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: 20.w),
                     child: Row(
@@ -782,8 +776,8 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                             height: 48.h,
                             child: ElevatedButton(
                               onPressed: _startChat,
-                              child: Text('Chat',
-                                  style: AppTextStyles.button),
+                              child:
+                                  Text('Chat', style: AppTextStyles.button),
                             ),
                           ),
                         ),
@@ -840,11 +834,9 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                             Icon(Icons.star,
                                 color: Colors.amber, size: 18.sp),
                             SizedBox(width: 6.w),
-                            Text(
-                              'Rate Provider',
-                              style: AppTextStyles.button
-                                  .copyWith(color: Colors.amber),
-                            ),
+                            Text('Rate Provider',
+                                style: AppTextStyles.button
+                                    .copyWith(color: Colors.amber)),
                           ],
                         ),
                       ),
@@ -852,7 +844,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                   ),
                   SizedBox(height: 24.h),
                 ],
-                if (_workPhotos.isNotEmpty) ...[
+                if (showPremiumFeatures && _workPhotos.isNotEmpty) ...[
                   Text('Work Photos', style: AppTextStyles.bodyLarge),
                   SizedBox(height: 8.h),
                   GridView.builder(
@@ -869,10 +861,8 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                       onTap: () => _viewPhoto(index),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(8.r),
-                        child: Image.network(
-                          _workPhotos[index],
-                          fit: BoxFit.cover,
-                        ),
+                        child: Image.network(_workPhotos[index],
+                            fit: BoxFit.cover),
                       ),
                     ),
                   ),
@@ -888,12 +878,9 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
 
   Widget _buildStat(String value, String label) => Column(
         children: [
-          Text(
-            value,
-            style: AppTextStyles.bodyLarge.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          Text(value,
+              style: AppTextStyles.bodyLarge
+                  .copyWith(fontWeight: FontWeight.w700)),
           Text(label, style: AppTextStyles.caption),
         ],
       );
