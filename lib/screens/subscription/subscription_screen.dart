@@ -17,20 +17,17 @@ class SubscriptionScreen extends StatefulWidget {
 
 class _SubscriptionScreenState extends State<SubscriptionScreen> {
   bool _isLoading = false;
-  bool _isNigeria = false;
   bool _isLoadingPrice = true;
-  int _basePriceNGN = 3500;
-  int _basePriceUSD = 10;
+  int _basePrice = 0;
+  int _selectedTier = 0;
 
   @override
   void initState() {
     super.initState();
-    final locale = WidgetsBinding.instance.platformDispatcher.locale;
-    _isNigeria = locale.countryCode == 'NG';
-    _loadPrices();
+    _loadPrice();
   }
 
-  Future<void> _loadPrices() async {
+  Future<void> _loadPrice() async {
     try {
       final configDoc = await FirebaseFirestore.instance
           .collection('app_config')
@@ -40,8 +37,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         final data = configDoc.data()!;
         if (mounted) {
           setState(() {
-            _basePriceNGN = (data['subscriptionPriceNGN'] ?? 3500) as int;
-            _basePriceUSD = (data['subscriptionPriceUSD'] ?? 10) as int;
+            _basePrice = (data['subscriptionPriceNGN'] ?? 0) as int;
             _isLoadingPrice = false;
           });
         }
@@ -52,10 +48,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       if (mounted) setState(() => _isLoadingPrice = false);
     }
   }
-
-  int get _basePrice => _isNigeria ? _basePriceNGN : _basePriceUSD;
-  String get _currency => _isNigeria ? 'NGN' : 'USD';
-  String get _currencySymbol => _isNigeria ? '₦' : '\$';
 
   List<Map<String, dynamic>> get _tiers {
     final monthly = _basePrice;
@@ -75,26 +67,21 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         'months': 6,
         'price': sixMonthPrice,
         'label': '6 Months',
-        'savings': 'Save $_currencySymbol${_formatPrice(sixMonthSaving)}',
+        'savings': 'Save ₦${_formatPrice(sixMonthSaving)}',
       },
       {
         'months': 12,
         'price': twelveMonthPrice,
         'label': '12 Months',
-        'savings': '15% off (Save $_currencySymbol${_formatPrice(twelveMonthSaving)})',
+        'savings': '15% off (Save ₦${_formatPrice(twelveMonthSaving)})',
       },
     ];
   }
 
   String _formatPrice(int price) {
-    if (_isNigeria) {
-      return price.toString().replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
-    }
-    return price.toString();
+    return price.toString().replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
   }
-
-  int _selectedTier = 0;
 
   Future<void> _subscribe() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -116,7 +103,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         body: jsonEncode({
           'email': user.email,
           'amount': tier['price'],
-          'currency': _currency,
+          'currency': 'NGN',
           'months': tier['months'],
           'userId': user.uid,
         }),
@@ -147,10 +134,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           }
         }
       } else {
+        final body = jsonDecode(response.body);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Payment initialization failed.'),
+              content: Text(body['error'] ?? 'Payment initialization failed.'),
               backgroundColor: AppColors.error,
             ),
           );
@@ -178,6 +166,20 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         appBar: AppBar(
             title: Text('GigsCourt Premium', style: AppTextStyles.headline3)),
         body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_basePrice == 0) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+            title: Text('GigsCourt Premium', style: AppTextStyles.headline3)),
+        body: Center(
+          child: Text(
+            'Subscription price not configured.',
+            style: AppTextStyles.bodyMedium,
+          ),
+        ),
       );
     }
 
@@ -256,7 +258,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                           ),
                         ),
                         Text(
-                          '$_currencySymbol${_formatPrice(tier['price'])}',
+                          '₦${_formatPrice(tier['price'])}',
                           style: AppTextStyles.bodyLarge.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
@@ -270,7 +272,13 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               SizedBox(height: 16.h),
 
               // Benefits
-              ..._benefits.map((b) => Padding(
+              ...[
+                'Unlimited client leads',
+                'Verified badge on your profile',
+                'Priority ranking in search',
+                'Appear in Featured section',
+                'Online status visible to clients',
+              ].map((b) => Padding(
                     padding: EdgeInsets.only(bottom: 8.h),
                     child: Row(
                       children: [
@@ -281,25 +289,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                       ],
                     ),
                   )),
-
-              if (!_isNigeria)
-                Padding(
-                  padding: EdgeInsets.only(top: 12.h),
-                  child: Row(
-                    children: [
-                      Icon(Icons.credit_card,
-                          size: 18.sp,
-                          color: AppColors.primary.withValues(alpha: 0.6)),
-                      SizedBox(width: 8.w),
-                      Text(
-                        'Pay securely with your card',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.primary.withValues(alpha: 0.6),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
 
               const Spacer(),
 
@@ -330,14 +319,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       ),
     );
   }
-
-  static const _benefits = [
-    'Unlimited client leads',
-    'Verified badge on your profile',
-    'Priority ranking in search',
-    'Appear in Featured section',
-    'Online status visible to clients',
-  ];
 }
 
 class _PaystackWebView extends StatefulWidget {
