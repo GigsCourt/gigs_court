@@ -128,7 +128,6 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
         });
       }
 
-      // Load address if not already loaded
       if (_providerAddress.isEmpty) {
         _loadAddress();
       }
@@ -555,12 +554,20 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
     final photoUrl = _userData!['profileImage'] ?? _userData!['photoUrl'];
     final bio = _userData!['bio'] ?? '';
     final isSubscribed = _userData!['isSubscribed'] == true;
+    final leadCount = _userData!['leadCount'] ?? 0;
+    final isFullyBooked = !isEarlyAccess && !isSubscribed && leadCount >= 10;
+    final isOwnProfile = _currentUser?.uid == widget.providerId;
     final showBadge = isEarlyAccess || isSubscribed;
     final showPremiumFeatures = isEarlyAccess || isSubscribed;
+
+    // Show fully booked view (not for own profile)
+    if (isFullyBooked && !isOwnProfile) {
+      return _buildFullyBookedView(name, photoUrl, bio);
+    }
+
     final rating = (_userData!['rating'] ?? _userData!['averageRating'] ?? 0.0)
         .toDouble();
     final reviewCount = _userData!['reviewCount'] ?? 0;
-    final isOwnProfile = _currentUser?.uid == widget.providerId;
     final showAppBarPhoto = _showAppBarPhoto;
 
     return Scaffold(
@@ -736,32 +743,44 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                   SizedBox(height: 8.h),
                 ],
                 if (_distanceKm != null)
-                  GestureDetector(
-                    onTap: showPremiumFeatures ? _openDirections : null,
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 20.w),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          showPremiumFeatures
-                              ? Icons.directions
-                              : Icons.straighten,
-                          size: 16.sp,
-                          color: showPremiumFeatures
-                              ? AppColors.primary
-                              : AppColors.primary.withValues(alpha: 0.5),
-                        ),
+                        Icon(Icons.straighten, size: 16.sp,
+                            color: AppColors.primary.withValues(alpha: 0.5)),
                         SizedBox(width: 4.w),
                         Text(
-                          '${_distanceKm!.toStringAsFixed(1)} km away${showPremiumFeatures ? " — Get directions" : ""}',
+                          '${_distanceKm!.toStringAsFixed(1)} km away',
                           style: AppTextStyles.bodySmall.copyWith(
-                            color: showPremiumFeatures
-                                ? AppColors.primary
-                                : AppColors.primary.withValues(alpha: 0.7),
-                            decoration: showPremiumFeatures
-                                ? TextDecoration.underline
-                                : null,
+                            color: AppColors.primary.withValues(alpha: 0.7),
                           ),
                         ),
+                        if (showPremiumFeatures) ...[
+                          SizedBox(width: 8.w),
+                          GestureDetector(
+                            onTap: _openDirections,
+                            child: Container(
+                              padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(12.r),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.directions, size: 14.sp, color: AppColors.primary),
+                                  SizedBox(width: 4.w),
+                                  Text('Get directions', style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w600,
+                                  )),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -872,6 +891,133 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFullyBookedView(String name, String? photoUrl, String bio) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, size: 20.sp),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/home');
+            }
+          },
+        ),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(20.w),
+          child: Column(
+            children: [
+              SizedBox(height: 16.h),
+              Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(80.r),
+                  child: SizedBox(
+                    width: 120.w,
+                    height: 120.w,
+                    child: photoUrl != null && photoUrl.toString().isNotEmpty
+                        ? Image.network(photoUrl, fit: BoxFit.cover)
+                        : Container(
+                            color: AppColors.primary.withValues(alpha: 0.06),
+                            child: Icon(Icons.person, size: 50.sp,
+                                color: AppColors.primary.withValues(alpha: 0.3)),
+                          ),
+                  ),
+                ),
+              ),
+              SizedBox(height: 16.h),
+              Text(name, style: AppTextStyles.headline2),
+              SizedBox(height: 4.h),
+              if (bio.isNotEmpty) ...[
+                Text(bio, textAlign: TextAlign.center,
+                    style: AppTextStyles.bodyMedium.copyWith(height: 1.5)),
+                SizedBox(height: 12.h),
+              ],
+              if (_services.isNotEmpty) ...[
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8.w,
+                  runSpacing: 8.h,
+                  children: _services.map((s) => Chip(
+                    label: Text(s['name'] ?? '', style: AppTextStyles.bodySmall),
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.08),
+                    side: BorderSide.none,
+                  )).toList(),
+                ),
+                SizedBox(height: 12.h),
+              ],
+              if (_providerAddress.isNotEmpty) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.location_on_outlined, size: 16.sp,
+                        color: AppColors.primary.withValues(alpha: 0.5)),
+                    SizedBox(width: 4.w),
+                    Flexible(child: Text(_providerAddress,
+                        style: AppTextStyles.bodySmall.copyWith(
+                            color: AppColors.primary.withValues(alpha: 0.7)))),
+                  ],
+                ),
+                SizedBox(height: 4.h),
+              ],
+              if (_distanceKm != null)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.straighten, size: 16.sp,
+                        color: AppColors.primary.withValues(alpha: 0.5)),
+                    SizedBox(width: 4.w),
+                    Text('${_distanceKm!.toStringAsFixed(1)} km away',
+                        style: AppTextStyles.bodySmall.copyWith(
+                            color: AppColors.primary.withValues(alpha: 0.7))),
+                  ],
+                ),
+              SizedBox(height: 32.h),
+              Container(
+                width: 80.w,
+                height: 80.w,
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.calendar_today, size: 36.sp, color: Colors.orange),
+              ),
+              SizedBox(height: 16.h),
+              Text(
+                '$name is currently fully booked and not accepting new jobs on GigsCourt today.',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: AppColors.primary.withValues(alpha: 0.7),
+                  height: 1.5,
+                ),
+              ),
+              SizedBox(height: 24.h),
+              SizedBox(
+                width: double.infinity,
+                height: 48.h,
+                child: ElevatedButton(
+                  onPressed: () {
+                    if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      context.go('/home');
+                    }
+                  },
+                  child: Text('Find Other ${_services.isNotEmpty ? _services.first['name'] ?? 'Providers' : 'Providers'} Near Me',
+                      style: AppTextStyles.button),
+                ),
+              ),
+              SizedBox(height: 40.h),
+            ],
+          ),
+        ),
       ),
     );
   }

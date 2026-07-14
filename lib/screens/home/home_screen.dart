@@ -243,8 +243,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
         final isSubscribed = userData['isSubscribed'] == true;
         final leadCount = userData['leadCount'] ?? 0;
-        final reviewCount = userData['reviewCount'] ?? 0;
-        final isFree = !isSubscribed && leadCount < 10 && reviewCount < 5;
+        final isFree = !isSubscribed && leadCount < 10;
 
         providersRaw.add({
           'id': id,

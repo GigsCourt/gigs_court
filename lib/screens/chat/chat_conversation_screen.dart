@@ -28,6 +28,7 @@ class ChatConversationScreen extends StatefulWidget {
 
 class _ChatConversationScreenState extends State<ChatConversationScreen> {
   final _messageController = TextEditingController();
+  final _messageFocusNode = FocusNode();
   final _currentUser = FirebaseAuth.instance.currentUser;
   final _scrollController = ScrollController();
   final _picker = ImagePicker();
@@ -45,6 +46,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   String? _playingVoiceUrl;
   bool _isPlaying = false;
   double _playbackSpeed = 1.0;
+  Duration _voicePosition = Duration.zero;
+  Duration _voiceDuration = Duration.zero;
   bool _isOtherOnline = false;
   bool _isOtherSubscribed = false;
 
@@ -64,7 +67,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   @override
   void initState() {
     super.initState();
-    _listenToTyping();
     _markMessagesAsRead();
     _listenToOnlineStatus();
     _audioPlayer.onPlayerStateChanged.listen((state) {
@@ -75,16 +77,27 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
           setState(() {
             _isPlaying = false;
             _playingVoiceUrl = null;
+            _voicePosition = Duration.zero;
           });
         }
       }
     });
+    _audioPlayer.onPositionChanged.listen((pos) {
+      if (mounted) setState(() => _voicePosition = pos);
+    });
+    _audioPlayer.onDurationChanged.listen((dur) {
+      if (mounted) setState(() => _voiceDuration = dur);
+    });
     _scrollController.addListener(_onScroll);
+    _messageController.addListener(() {
+      setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _messageController.dispose();
+    _messageFocusNode.dispose();
     _scrollController.dispose();
     _typingTimer?.cancel();
     _recordingTimer?.cancel();
@@ -105,14 +118,14 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     });
   }
 
-  void _listenToTyping() {
-    _messageController.addListener(() {
-      if (_messageController.text.isNotEmpty && !_isTyping) {
-        _setTyping(true);
-      } else if (_messageController.text.isEmpty && _isTyping) {
-        _setTyping(false);
-      }
-    });
+  void _onTextChanged() {
+    final hasText = _messageController.text.isNotEmpty;
+    if (hasText && !_isTyping) {
+      _setTyping(true);
+    } else if (!hasText && _isTyping) {
+      _setTyping(false);
+    }
+    setState(() {});
   }
 
   Future<void> _setTyping(bool value) async {
@@ -161,7 +174,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       'unreadCount': {widget.otherUserId: FieldValue.increment(1)},
     });
 
-    if (text != null) { _messageController.clear(); _setTyping(false); }
+    if (text != null) {
+      _messageController.clear();
+      _setTyping(false);
+      // Refocus the text field to keep keyboard open
+      _messageFocusNode.requestFocus();
+    }
     final displayName = await DisplayNameService.getDisplayName(_currentUser.uid);
     final preview = lastMessage.length > 80 ? '${lastMessage.substring(0, 80)}...' : lastMessage;
     await FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).collection('notifications').add({
@@ -276,10 +294,16 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       await _audioPlayer.resume();
     } else {
       await _audioPlayer.stop();
+      setState(() { _voicePosition = Duration.zero; });
       await _audioPlayer.play(DeviceFileSource(localPath));
       setState(() { _playingVoiceUrl = url; _isPlaying = true; });
     }
     await _audioPlayer.setPlaybackRate(_playbackSpeed);
+  }
+
+  void _seekVoice(double value) {
+    final targetMs = (value * _voiceDuration.inMilliseconds).round();
+    _audioPlayer.seek(Duration(milliseconds: targetMs));
   }
 
   void _cycleSpeed() {
@@ -359,44 +383,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     else { _lastDocument = snapshot.docs.last; setState(() => _isLoadingMore = false); }
   }
 
-  Future<void> _showReviewDialog() async {
-    int rating = 0;
-    final controller = TextEditingController();
-    final result = await showDialog<bool>(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDialogState) => AlertDialog(title: Text('Rate Provider', style: AppTextStyles.bodyLarge), content: Column(mainAxisSize: MainAxisSize.min, children: [Row(mainAxisAlignment: MainAxisAlignment.center, children: List.generate(5, (i) => IconButton(icon: Icon(i < rating ? Icons.star : Icons.star_border, color: Colors.amber, size: 36.sp), onPressed: () => setDialogState(() => rating = i + 1)))), SizedBox(height: 12.h), TextField(controller: controller, maxLines: 3, decoration: InputDecoration(hintText: 'Share your experience (optional)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.r))))]), actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), TextButton(onPressed: () { if (rating > 0) Navigator.pop(ctx, true); }, child: Text('Submit', style: TextStyle(color: AppColors.primary)))])));
-    if (result == true && rating > 0 && _currentUser != null) {
-      final clientName = await DisplayNameService.getDisplayName(_currentUser.uid);
-      final existing = await FirebaseFirestore.instance.collection('reviews').where('providerId', isEqualTo: widget.otherUserId).where('clientId', isEqualTo: _currentUser.uid).get();
-      if (existing.docs.isNotEmpty) {
-        await existing.docs.first.reference.update({'rating': rating, 'comment': controller.text.trim(), 'createdAt': FieldValue.serverTimestamp()});
-      } else {
-        await FirebaseFirestore.instance.collection('reviews').add({'providerId': widget.otherUserId, 'clientId': _currentUser.uid, 'clientName': clientName, 'rating': rating, 'comment': controller.text.trim(), 'createdAt': FieldValue.serverTimestamp()});
-      }
-      final allReviews = await FirebaseFirestore.instance.collection('reviews').where('providerId', isEqualTo: widget.otherUserId).get();
-      bool isSubscribed = false;
-      try {
-        final doc = await FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).get();
-        if (doc.exists) {
-          isSubscribed = doc.data()?['isSubscribed'] == true;
-        }
-      } catch (_) {}
-      final remaining = 5 - allReviews.docs.length;
-      final stars = '⭐' * rating;
-      final reviewText = controller.text.trim().isNotEmpty ? ": '${controller.text.trim()}'" : '';
-      final body = isSubscribed
-          ? '$clientName rated you $stars$reviewText'
-          : '$clientName rated you $stars$reviewText. You have $remaining free reviews remaining.';
-      await FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).collection('notifications').add({
-        'type': isSubscribed ? 'review' : 'review_milestone',
-        'title': 'New Review! ⭐',
-        'body': body,
-        'read': false,
-        'data': {},
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Review submitted!'), backgroundColor: AppColors.success));
-    }
-  }
-
   String _getMessageGroup(DateTime date) {
     final now = DateTime.now(); final today = DateTime(now.year, now.month, now.day);
     final diff = today.difference(DateTime(date.year, date.month, date.day)).inDays;
@@ -409,6 +395,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     if (ts == null) return '';
     final d = ts.toDate();
     return '${d.hour}:${d.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _fmtDuration(Duration d) {
+    final min = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final sec = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$min:$sec';
   }
 
   @override
@@ -426,7 +418,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             GestureDetector(
-              onTap: _isOtherSubscribed ? () => context.push('/provider/${widget.otherUserId}') : null,
+              onTap: () => context.push('/provider/${widget.otherUserId}'),
               child: FutureBuilder<DocumentSnapshot?>(
                 future: FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).get(),
                 builder: (context, snap) {
@@ -473,21 +465,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             ),
           ],
         ),
-        actions: [
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                icon: Icon(Icons.star_outline, size: 18.sp),
-                onPressed: _showReviewDialog,
-                padding: EdgeInsets.zero,
-                constraints: BoxConstraints(minWidth: 32.w, minHeight: 32.h),
-              ),
-              FittedBox(child: Text('Review', style: AppTextStyles.caption.copyWith(fontSize: 8.sp, color: AppColors.grey))),
-            ],
-          ),
-          SizedBox(width: 4.w),
-        ],
       ),
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
@@ -600,6 +577,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         Expanded(
           child: TextField(
             controller: _messageController,
+            focusNode: _messageFocusNode,
+            onChanged: (_) => _onTextChanged(),
             style: AppTextStyles.bodyMedium,
             decoration: InputDecoration(
               hintText: _isReplying ? 'Type your reply...' : 'Type a message...',
@@ -740,13 +719,86 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       );
     }
     if (type == 'voice' && voiceUrl != null) {
-      return _VoiceBubble(
-        voiceUrl: voiceUrl, duration: voiceDuration ?? 0, isMine: isMine,
-        isPlaying: _isPlaying && _playingVoiceUrl == voiceUrl,
-        playbackSpeed: _playbackSpeed,
-        onPlay: () => _playVoice(voiceUrl),
-        onSpeedCycle: _cycleSpeed,
-        onGetCached: () => _getCachedVoice(voiceUrl),
+      final isCurrentVoice = _isPlaying && _playingVoiceUrl == voiceUrl;
+      return Container(
+        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(16.r),
+          border: isMine ? null : Border.all(color: AppColors.primary.withValues(alpha: 0.1)),
+        ),
+        child: SizedBox(
+          width: MediaQuery.of(context).size.width * 0.45,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GestureDetector(
+                onTap: () => _playVoice(voiceUrl),
+                child: Icon(
+                  isCurrentVoice ? Icons.pause : Icons.play_arrow,
+                  color: textColor,
+                  size: 24.sp,
+                ),
+              ),
+              SizedBox(width: 8.w),
+              Expanded(
+                child: GestureDetector(
+                  onTapDown: isCurrentVoice ? (details) {
+                    final box = context.findRenderObject() as RenderBox;
+                    final tapX = details.localPosition.dx;
+                    final boxWidth = box.size.width;
+                    if (boxWidth > 0) {
+                      _seekVoice(tapX / boxWidth);
+                    }
+                  } : null,
+                  onHorizontalDragUpdate: isCurrentVoice ? (details) {
+                    final box = context.findRenderObject() as RenderBox;
+                    final tapX = details.localPosition.dx;
+                    final boxWidth = box.size.width;
+                    if (boxWidth > 0) {
+                      _seekVoice(tapX / boxWidth);
+                    }
+                  } : null,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(2.r),
+                    child: LinearProgressIndicator(
+                      value: isCurrentVoice && _voiceDuration.inMilliseconds > 0
+                          ? _voicePosition.inMilliseconds / _voiceDuration.inMilliseconds
+                          : 0.0,
+                      minHeight: 4.h,
+                      backgroundColor: textColor.withValues(alpha: 0.2),
+                      color: textColor,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: 6.w),
+              Text(
+                isCurrentVoice
+                    ? _fmtDuration(_voicePosition)
+                    : _fmtDuration(Duration(seconds: voiceDuration ?? 0)),
+                style: AppTextStyles.caption.copyWith(fontSize: 10.sp, color: textColor),
+              ),
+              SizedBox(width: 4.w),
+              GestureDetector(
+                onTap: isCurrentVoice ? _cycleSpeed : null,
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 2.h),
+                  decoration: BoxDecoration(
+                    color: textColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4.r),
+                  ),
+                  child: FittedBox(
+                    child: Text(
+                      '${_playbackSpeed}x',
+                      style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w600, color: textColor),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
     return Container(
@@ -762,79 +814,5 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
   void _showFullScreenImage(String imageUrl) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => Scaffold(backgroundColor: Colors.black, appBar: AppBar(backgroundColor: Colors.black, iconTheme: IconThemeData(color: Colors.white)), body: Center(child: CachedNetworkImage(imageUrl: imageUrl, fit: BoxFit.contain)))));
-  }
-}
-
-class _VoiceBubble extends StatefulWidget {
-  final String voiceUrl; final int duration; final bool isMine; final bool isPlaying;
-  final double playbackSpeed; final VoidCallback onPlay; final VoidCallback onSpeedCycle;
-  final Future<String> Function() onGetCached;
-  const _VoiceBubble({required this.voiceUrl, required this.duration, required this.isMine, required this.isPlaying, required this.playbackSpeed, required this.onPlay, required this.onSpeedCycle, required this.onGetCached});
-  @override
-  State<_VoiceBubble> createState() => _VoiceBubbleState();
-}
-
-class _VoiceBubbleState extends State<_VoiceBubble> {
-  final _audioPlayer = AudioPlayer();
-  Duration _position = Duration.zero; Duration _duration = Duration.zero;
-
-  @override
-  void initState() {
-    super.initState();
-    _duration = Duration(seconds: widget.duration);
-    _audioPlayer.onPositionChanged.listen((pos) { if (mounted) setState(() => _position = pos); });
-    _audioPlayer.onDurationChanged.listen((dur) { if (mounted) setState(() => _duration = dur); });
-    _initPlayer();
-  }
-
-  Future<void> _initPlayer() async { await widget.onGetCached(); }
-
-  @override
-  void dispose() { _audioPlayer.dispose(); super.dispose(); }
-
-  void _seekTo(double value) { _audioPlayer.seek(Duration(milliseconds: (value * _duration.inMilliseconds).round())); }
-
-  String _fmt(Duration d) => '${d.inMinutes.remainder(60).toString().padLeft(1, '0')}:${d.inSeconds.remainder(60).toString().padLeft(2, '0')}';
-
-  @override
-  Widget build(BuildContext context) {
-    final bgColor = widget.isMine ? AppColors.primary : AppColors.white;
-    final textColor = widget.isMine ? AppColors.white : AppColors.primary;
-    final progress = _duration.inMilliseconds > 0 ? _position.inMilliseconds / _duration.inMilliseconds : 0.0;
-    final width = MediaQuery.of(context).size.width * 0.45;
-
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(16.r),
-        border: widget.isMine ? null : Border.all(color: AppColors.primary.withValues(alpha: 0.1)),
-      ),
-      child: SizedBox(width: width, child: Row(mainAxisSize: MainAxisSize.min, children: [
-        GestureDetector(
-          onTap: widget.onPlay,
-          child: Icon(widget.isPlaying ? Icons.pause : Icons.play_arrow, color: textColor, size: 24.sp),
-        ),
-        SizedBox(width: 8.w),
-        Expanded(
-          child: GestureDetector(
-            onTapDown: (details) { final box = context.findRenderObject() as RenderBox; _seekTo((details.localPosition.dx - 44) / (box.size.width - 56)); },
-            onHorizontalDragUpdate: (details) { final box = context.findRenderObject() as RenderBox; _seekTo((details.localPosition.dx - 44) / (box.size.width - 56)); },
-            child: ClipRRect(borderRadius: BorderRadius.circular(2.r), child: LinearProgressIndicator(value: progress, minHeight: 4.h, backgroundColor: textColor.withValues(alpha: 0.2), color: textColor)),
-          ),
-        ),
-        SizedBox(width: 6.w),
-        FittedBox(child: Text(_fmt(_position), style: AppTextStyles.caption.copyWith(fontSize: 10.sp, color: textColor))),
-        SizedBox(width: 4.w),
-        GestureDetector(
-          onTap: widget.onSpeedCycle,
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: 4.w, vertical: 2.h),
-            decoration: BoxDecoration(color: textColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4.r)),
-            child: FittedBox(child: Text('${widget.playbackSpeed}x', style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w600, color: textColor))),
-          ),
-        ),
-      ])),
-    );
   }
 }

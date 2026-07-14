@@ -44,7 +44,7 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
     _profileListener?.cancel();
     _profileListener = FirebaseFirestore.instance
         .collection('users')
-        .doc(_currentUser!.uid)
+        .doc(_currentUser.uid)
         .snapshots()
         .listen((doc) async {
       if (!doc.exists) {

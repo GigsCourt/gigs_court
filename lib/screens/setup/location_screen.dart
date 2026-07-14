@@ -159,7 +159,26 @@ class _LocationScreenState extends State<LocationScreen> {
                 padding: EdgeInsets.fromLTRB(24.w, 16.h, 24.w, 32.h),
                 decoration: BoxDecoration(color: AppColors.white.withValues(alpha: 0.95), borderRadius: BorderRadius.vertical(top: Radius.circular(24.r))),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  TextField(controller: _addressController, onChanged: (value) => _address = value, style: AppTextStyles.bodyMedium, decoration: InputDecoration(hintText: _address.isNotEmpty ? _address : 'Describe your workspace location...', hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.3)), prefixIcon: Icon(Icons.edit_location_outlined, size: 20.sp, color: AppColors.primary.withValues(alpha: 0.5)))),
+                  // "Use this location" button — always visible
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _isLoadingAddress ? null : _fetchAddress,
+                      icon: _isLoadingAddress
+                          ? SizedBox(height: 16.h, width: 16.w, child: const CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2))
+                          : Icon(Icons.location_on, size: 18.sp),
+                      label: Text(_isLoadingAddress ? 'Getting address...' : 'Use this location',
+                          style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        side: BorderSide(color: AppColors.primary.withValues(alpha: 0.3)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
+                        padding: EdgeInsets.symmetric(vertical: 12.h),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 12.h),
+                  TextField(controller: _addressController, onChanged: (value) => _address = value, style: AppTextStyles.bodyMedium, decoration: InputDecoration(hintText: 'Describe your workspace location...', hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.primary.withValues(alpha: 0.3)), prefixIcon: Icon(Icons.edit_location_outlined, size: 20.sp, color: AppColors.primary.withValues(alpha: 0.5)))),
                   SizedBox(height: 4.h),
                   Text('Describe your workspace so clients can find you (e.g., "No. 15 Adeola Odeku Street, Victoria Island")', style: AppTextStyles.caption),
                   SizedBox(height: 12.h),
@@ -170,17 +189,6 @@ class _LocationScreenState extends State<LocationScreen> {
                   Text('You won\'t appear as a provider until you set your workspace.', textAlign: TextAlign.center, style: AppTextStyles.caption),
                 ]),
               )),
-
-            // "Use this location" pill (above bottom sheet)
-            if (_isMapReady && _address.isEmpty && !_isLoadingAddress)
-              Positioned(bottom: 220.h, left: 0, right: 0, child: Center(child: GestureDetector(
-                onTap: _fetchAddress,
-                child: Container(padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h), decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(24.r), boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.3), blurRadius: 8.r, offset: Offset(0, 2.h))]), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.location_on, size: 18.sp, color: AppColors.white), SizedBox(width: 6.w), Text('Use this location?', style: AppTextStyles.bodySmall.copyWith(color: AppColors.white, fontWeight: FontWeight.w600))])),
-              ))),
-
-            // Loading address indicator (above bottom sheet)
-            if (_isLoadingAddress)
-              Positioned(bottom: 220.h, left: 0, right: 0, child: Center(child: Container(padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h), decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(24.r)), child: Row(mainAxisSize: MainAxisSize.min, children: [SizedBox(height: 16.h, width: 16.w, child: const CircularProgressIndicator(color: AppColors.white, strokeWidth: 2)), SizedBox(width: 8.w), Text('Getting address...', style: AppTextStyles.bodySmall.copyWith(color: AppColors.white))])))),
           ],
         ),
       ),

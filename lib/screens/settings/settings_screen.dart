@@ -18,143 +18,56 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _isDeleting = false;
 
-  // ---- Change Password ----
+    // ---- Change Password ----
   Future<void> _changePassword() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user?.email == null) return;
 
-    final currentPasswordController = TextEditingController();
-    final newPasswordController = TextEditingController();
-    final confirmPasswordController = TextEditingController();
-    bool obscureCurrent = true;
-    bool obscureNew = true;
-    bool obscureConfirm = true;
-    bool isLoading = false;
-    String? errorMessage;
-
-    final result = await showModalBottomSheet<bool>(
+    final result = await showDialog<bool>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20.r))),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.only(
-            left: 24.w, right: 24.w, top: 24.h,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24.h,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Change Password', style: AppTextStyles.headline3),
-              SizedBox(height: 20.h),
-              if (errorMessage != null)
-                Container(
-                  padding: EdgeInsets.all(12.w),
-                  decoration: BoxDecoration(color: AppColors.error.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12.r)),
-                  child: Text(errorMessage!, style: AppTextStyles.bodySmall.copyWith(color: AppColors.error)),
-                ),
-              if (errorMessage != null) SizedBox(height: 12.h),
-              TextField(
-                controller: currentPasswordController,
-                obscureText: obscureCurrent,
-                decoration: InputDecoration(
-                  labelText: 'Current Password',
-                  suffixIcon: IconButton(
-                    icon: Icon(obscureCurrent ? Icons.visibility_off : Icons.visibility, size: 20.sp),
-                    onPressed: () => setSheetState(() => obscureCurrent = !obscureCurrent),
-                  ),
-                ),
+      builder: (ctx) => AlertDialog(
+        title: Text('Change Password', style: AppTextStyles.bodyLarge),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'We\'ll send a password reset link to:',
+              style: AppTextStyles.bodyMedium,
+            ),
+            SizedBox(height: 8.h),
+            Text(
+              user!.email!,
+              style: AppTextStyles.bodyMedium.copyWith(
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
               ),
-              SizedBox(height: 12.h),
-              TextField(
-                controller: newPasswordController,
-                obscureText: obscureNew,
-                decoration: InputDecoration(
-                  labelText: 'New Password',
-                  hintText: 'At least 8 characters',
-                  suffixIcon: IconButton(
-                    icon: Icon(obscureNew ? Icons.visibility_off : Icons.visibility, size: 20.sp),
-                    onPressed: () => setSheetState(() => obscureNew = !obscureNew),
-                  ),
-                ),
-              ),
-              SizedBox(height: 12.h),
-              TextField(
-                controller: confirmPasswordController,
-                obscureText: obscureConfirm,
-                decoration: InputDecoration(
-                  labelText: 'Confirm New Password',
-                  suffixIcon: IconButton(
-                    icon: Icon(obscureConfirm ? Icons.visibility_off : Icons.visibility, size: 20.sp),
-                    onPressed: () => setSheetState(() => obscureConfirm = !obscureConfirm),
-                  ),
-                ),
-              ),
-              SizedBox(height: 20.h),
-              SizedBox(
-                height: 48.h,
-                child: ElevatedButton(
-                  onPressed: isLoading ? null : () async {
-                    errorMessage = null;
-                    final currentPassword = currentPasswordController.text;
-                    final newPassword = newPasswordController.text;
-                    final confirmPassword = confirmPasswordController.text;
-
-                    if (currentPassword.isEmpty) {
-                      setSheetState(() => errorMessage = 'Please enter your current password');
-                      return;
-                    }
-                    if (newPassword.length < 8) {
-                      setSheetState(() => errorMessage = 'New password must be at least 8 characters');
-                      return;
-                    }
-                    if (newPassword != confirmPassword) {
-                      setSheetState(() => errorMessage = 'Passwords do not match');
-                      return;
-                    }
-
-                    setSheetState(() => isLoading = true);
-                    try {
-                      final credential = EmailAuthProvider.credential(email: user!.email!, password: currentPassword);
-                      await user.reauthenticateWithCredential(credential);
-                      await user.updatePassword(newPassword);
-                      if (ctx.mounted) Navigator.pop(ctx, true);
-                    } on FirebaseAuthException catch (e) {
-                      setSheetState(() {
-                        isLoading = false;
-                        if (e.code == 'wrong-password') {
-                          errorMessage = 'Current password is incorrect';
-                        } else if (e.code == 'weak-password') {
-                          errorMessage = 'New password is too weak';
-                        } else {
-                          errorMessage = 'Failed to change password. Please try again.';
-                        }
-                      });
-                    } catch (_) {
-                      setSheetState(() {
-                        isLoading = false;
-                        errorMessage = 'Something went wrong. Please try again.';
-                      });
-                    }
-                  },
-                  child: isLoading ? SizedBox(height: 22.h, width: 22.w, child: const CircularProgressIndicator(color: AppColors.white, strokeWidth: 2)) : Text('Update Password', style: AppTextStyles.button),
-                ),
-              ),
-              SizedBox(height: 8.h),
-              TextButton(
-                onPressed: isLoading ? null : () => Navigator.pop(ctx),
-                child: Text('Cancel', style: AppTextStyles.bodyMedium),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              await FirebaseAuth.instance.sendPasswordResetEmail(email: user.email!);
+              if (ctx.mounted) Navigator.pop(ctx, true);
+            },
+            child: Text('Send Reset Link', style: AppTextStyles.button.copyWith(color: AppColors.white)),
+          ),
+        ],
       ),
     );
 
     if (result == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Password updated successfully.'), backgroundColor: AppColors.success));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Password reset link sent. Check your inbox.'),
+          backgroundColor: AppColors.success,
+        ),
+      );
     }
   }
 

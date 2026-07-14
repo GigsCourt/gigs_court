@@ -36,10 +36,9 @@ class ProviderCardData {
     this.isOwnProfile = false,
   });
 
-  bool get isLocked => !isEarlyAccess && !isFree && !isSubscribed;
-  bool get isTappable => isEarlyAccess || isFree || isSubscribed || isOwnProfile;
   bool get showOnlineStatus => isEarlyAccess || isSubscribed;
   bool get showVerifiedBadge => isEarlyAccess || isSubscribed;
+  bool get isAcceptingClients => isEarlyAccess || isSubscribed || isFree;
 
   ProviderCardData copyWith({
     String? id,
@@ -93,42 +92,31 @@ class ProviderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        if (provider.isTappable) {
-          onTap?.call();
-        } else {
-          _showLockedDialog(context);
+        onTap?.call();
+        if (!provider.isEarlyAccess && !provider.isSubscribed && !provider.isOwnProfile) {
+          FirebaseFirestore.instance
+              .collection('users')
+              .doc(provider.id)
+              .collection('notifications')
+              .add({
+            'type': 'missed_connection',
+            'title': 'Profile Viewed',
+            'body': provider.isAcceptingClients
+                ? 'A potential client viewed your profile but your chat, directions, and work photos are hidden until you subscribe.'
+                : 'A client tried to book you but your profile is listed as Fully Booked. Subscribe to start accepting clients again.',
+            'read': false,
+            'data': {'providerId': provider.id},
+            'createdAt': FieldValue.serverTimestamp(),
+          });
         }
       },
       child: isHorizontal ? _buildHorizontalCard() : _buildPortraitCard(context),
     );
   }
 
-  void _showLockedDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Not Available', style: AppTextStyles.bodyLarge),
-        content: Text('This provider is currently not accepting new clients.', style: AppTextStyles.bodyMedium),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
-      ),
-    ).then((_) {
-      FirebaseFirestore.instance
-          .collection('users')
-          .doc(provider.id)
-          .collection('notifications')
-          .add({
-        'type': 'missed_connection',
-        'title': 'Missed Connection',
-        'body': 'A potential client tried to view your profile but couldn\'t. Please subscribe to keep accepting clients.',
-        'read': false,
-        'data': {},
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    });
-  }
-
   Widget _buildPhotoSection({double? height}) {
     final hasWorkPhoto = provider.latestWorkPhoto != null && provider.latestWorkPhoto!.isNotEmpty;
+    final showWorkPhotos = provider.isEarlyAccess || provider.isSubscribed;
     return ClipRRect(
       borderRadius: isHorizontal
           ? BorderRadius.horizontal(left: Radius.circular(16.r))
@@ -140,13 +128,13 @@ class ProviderCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (hasWorkPhoto)
+            if (hasWorkPhoto && showWorkPhotos)
               Image.network(provider.latestWorkPhoto!, fit: BoxFit.cover)
             else if (provider.profileImage.isNotEmpty)
               Image.network(provider.profileImage, fit: BoxFit.cover)
             else
               Icon(Icons.person, size: 36.sp, color: AppColors.primary.withValues(alpha: 0.3)),
-            if (hasWorkPhoto)
+            if (hasWorkPhoto && showWorkPhotos)
               Positioned(
                 top: 8.h,
                 left: 8.w,
@@ -165,11 +153,6 @@ class ProviderCard extends StatelessWidget {
                       ? Icon(Icons.person, size: 20.sp, color: AppColors.primary.withValues(alpha: 0.5))
                       : null,
                 ),
-              ),
-            if (provider.isLocked)
-              Container(
-                color: Colors.black.withValues(alpha: 0.4),
-                child: Center(child: Icon(Icons.lock_outline, color: AppColors.white, size: 32.sp)),
               ),
           ],
         ),
@@ -201,6 +184,8 @@ class ProviderCard extends StatelessWidget {
                     if (provider.showVerifiedBadge) ...[SizedBox(width: 4.w), Icon(Icons.verified, size: 16.sp, color: _verifiedBlue)],
                     if (provider.isOwnProfile) ...[SizedBox(width: 4.w), Text('(You)', style: AppTextStyles.caption)],
                   ]),
+                  SizedBox(height: 4.h),
+                  _buildStatusChip(),
                   SizedBox(height: 4.h),
                   if (provider.showOnlineStatus)
                     Row(children: [
@@ -251,6 +236,8 @@ class ProviderCard extends StatelessWidget {
                   if (provider.isOwnProfile) ...[SizedBox(width: 2.w), Text('(You)', style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp))],
                 ]),
                 SizedBox(height: 3.h),
+                _buildStatusChip(),
+                SizedBox(height: 3.h),
                 if (provider.showOnlineStatus)
                   Row(children: [
                     Container(width: 6.w, height: 6.h, decoration: BoxDecoration(color: provider.isOnline ? AppColors.success : AppColors.grey, shape: BoxShape.circle)),
@@ -267,6 +254,27 @@ class ProviderCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStatusChip() {
+    if (provider.isOwnProfile) return const SizedBox.shrink();
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+      decoration: BoxDecoration(
+        color: provider.isAcceptingClients
+            ? AppColors.success.withValues(alpha: 0.1)
+            : Colors.orange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(4.r),
+      ),
+      child: Text(
+        provider.isAcceptingClients ? 'Accepting clients' : 'Fully booked',
+        style: AppTextStyles.caption.copyWith(
+          fontSize: 9.sp,
+          color: provider.isAcceptingClients ? AppColors.success : Colors.orange,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

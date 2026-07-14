@@ -6,6 +6,7 @@ import '../screens/verify_email/verify_email_screen.dart';
 import '../screens/setup/profile_photo_screen.dart';
 import '../screens/setup/location_screen.dart';
 import '../screens/setup/services_screen.dart';
+import '../screens/setup/phone_screen.dart';
 import '../screens/shell/main_shell.dart';
 import '../screens/profile/provider_profile_screen.dart';
 import '../screens/profile/edit_profile_screen.dart';
@@ -31,6 +32,7 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/setup/photo', builder: (context, state) => const ProfilePhotoScreen()),
     GoRoute(path: '/setup/location', builder: (context, state) => const LocationScreen()),
     GoRoute(path: '/setup/services', builder: (context, state) => const ServicesScreen()),
+    GoRoute(path: '/setup/phone', builder: (context, state) => const PhoneScreen()),
     GoRoute(path: '/home', builder: (context, state) => const MainShell()),
     GoRoute(path: '/notifications', builder: (context, state) => const NotificationsScreen()),
     GoRoute(path: '/provider/:id', builder: (context, state) {
