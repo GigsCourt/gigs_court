@@ -71,7 +71,6 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
           _isLoading = false;
         });
       }
-      // Load address
       try {
         final locationData = await _supabase
             .from('provider_locations')
@@ -261,7 +260,7 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
                 ),
               ),
             ),
-            SizedBox(height: 16.h),
+            SizedBox(height: 10.h),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -278,7 +277,7 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
                 ],
               ],
             ),
-            SizedBox(height: 4.h),
+            SizedBox(height: 2.h),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -299,7 +298,7 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
                 ),
               ],
             ),
-            SizedBox(height: 16.h),
+            SizedBox(height: 10.h),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -316,33 +315,26 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
                 ),
               ],
             ),
-            SizedBox(height: 20.h),
+            SizedBox(height: 12.h),
             if (bio.isNotEmpty) ...[
               Text(
                 bio,
                 textAlign: TextAlign.center,
                 style: AppTextStyles.bodyMedium.copyWith(height: 1.5),
               ),
-              SizedBox(height: 16.h),
+              SizedBox(height: 10.h),
             ],
             if (_services.isNotEmpty) ...[
               Text('Services', style: AppTextStyles.bodyLarge),
-              SizedBox(height: 8.h),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8.w,
-                runSpacing: 8.h,
-                children: _services
-                    .map((s) => Chip(
-                          label: Text(s['name'] ?? '',
-                              style: AppTextStyles.bodySmall),
-                          backgroundColor:
-                              AppColors.primary.withValues(alpha: 0.08),
-                          side: BorderSide.none,
-                        ))
-                    .toList(),
+              SizedBox(height: 6.h),
+              Text(
+                _services.map((s) => s['name'] ?? '').join(', '),
+                textAlign: TextAlign.center,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.primary.withValues(alpha: 0.7),
+                ),
               ),
-              SizedBox(height: 16.h),
+              SizedBox(height: 10.h),
             ],
             if (address.isNotEmpty) ...[
               Row(
@@ -362,7 +354,7 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
                   ),
                 ],
               ),
-              SizedBox(height: 16.h),
+              SizedBox(height: 10.h),
             ],
             _buildStatusBar(
               isEarlyAccess: isEarlyAccess,
@@ -370,7 +362,7 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
               subscriptionExpiry: subscriptionExpiry,
               leadCount: leadCount,
             ),
-            SizedBox(height: 20.h),
+            SizedBox(height: 12.h),
             SizedBox(
               width: double.infinity,
               height: 48.h,
@@ -387,7 +379,7 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
                         .copyWith(color: AppColors.primary)),
               ),
             ),
-            SizedBox(height: 24.h),
+            SizedBox(height: 16.h),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -451,7 +443,6 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
     required Timestamp? subscriptionExpiry,
     required int leadCount,
   }) {
-    // State 1: Early access ON → all features unlocked
     if (isEarlyAccess) {
       return Container(
         width: double.infinity,
@@ -478,7 +469,6 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
       );
     }
 
-    // Check if subscribed and not expired
     bool activeSubscription = false;
     if (isSubscribed && subscriptionExpiry != null) {
       final expiryDate = subscriptionExpiry.toDate();
@@ -487,7 +477,6 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
       }
     }
 
-    // State 2: Active subscription
     if (activeSubscription) {
       final expiryDate = subscriptionExpiry!.toDate();
       return Container(
@@ -515,7 +504,6 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
       );
     }
 
-    // State 3: Freemium — has leads left
     if (leadCount < 10) {
       final remaining = 10 - leadCount;
       return Container(
@@ -572,7 +560,6 @@ class _OwnProfileScreenState extends State<OwnProfileScreen> {
       );
     }
 
-    // State 4: Exhausted — no leads left
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(16.w),

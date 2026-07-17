@@ -128,9 +128,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
         });
       }
 
-      if (_providerAddress.isEmpty) {
-        _loadAddress();
-      }
+      await _loadAddress();
     });
   }
 
@@ -558,9 +556,8 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
     final isFullyBooked = !isEarlyAccess && !isSubscribed && leadCount >= 10;
     final isOwnProfile = _currentUser?.uid == widget.providerId;
     final showBadge = isEarlyAccess || isSubscribed;
-    final showPremiumFeatures = isEarlyAccess || isSubscribed;
+    final showPremiumFeatures = isEarlyAccess || isSubscribed || leadCount < 10;
 
-    // Show fully booked view (not for own profile)
     if (isFullyBooked && !isOwnProfile) {
       return _buildFullyBookedView(name, photoUrl, bio);
     }
@@ -617,7 +614,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
           SliverToBoxAdapter(
             child: Column(
               children: [
-                SizedBox(height: 16.h),
+                SizedBox(height: 10.h),
                 if (!showAppBarPhoto)
                   Center(
                     child: ClipRRect(
@@ -639,7 +636,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                       ),
                     ),
                   ),
-                SizedBox(height: 16.h),
+                SizedBox(height: 10.h),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -655,7 +652,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                     ],
                   ],
                 ),
-                SizedBox(height: 4.h),
+                SizedBox(height: 2.h),
                 if (showBadge)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -680,7 +677,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                       ),
                     ],
                   ),
-                SizedBox(height: 16.h),
+                SizedBox(height: 10.h),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -693,33 +690,26 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                     ),
                   ],
                 ),
-                SizedBox(height: 20.h),
+                SizedBox(height: 12.h),
                 if (bio.isNotEmpty) ...[
                   Text(
                     bio,
                     textAlign: TextAlign.center,
                     style: AppTextStyles.bodyMedium.copyWith(height: 1.5),
                   ),
-                  SizedBox(height: 16.h),
+                  SizedBox(height: 10.h),
                 ],
                 if (_services.isNotEmpty) ...[
                   Text('Services', style: AppTextStyles.bodyLarge),
                   SizedBox(height: 8.h),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 8.w,
-                    runSpacing: 8.h,
-                    children: _services
-                        .map((s) => Chip(
-                              label: Text(s['name'] ?? '',
-                                  style: AppTextStyles.bodySmall),
-                              backgroundColor: AppColors.primary
-                                  .withValues(alpha: 0.08),
-                              side: BorderSide.none,
-                            ))
-                        .toList(),
+                  Text(
+                    _services.map((s) => s['name'] ?? '').join(', '),
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.primary.withValues(alpha: 0.7),
+                    ),
                   ),
-                  SizedBox(height: 16.h),
+                  SizedBox(height: 10.h),
                 ],
                 if (_providerAddress.isNotEmpty) ...[
                   Row(
@@ -740,7 +730,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                       ),
                     ],
                   ),
-                  SizedBox(height: 8.h),
+                  SizedBox(height: 4.h),
                 ],
                 if (_distanceKm != null)
                   Padding(
@@ -784,7 +774,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                       ],
                     ),
                   ),
-                SizedBox(height: 20.h),
+                SizedBox(height: 12.h),
                 if (!isOwnProfile && showPremiumFeatures) ...[
                   Padding(
                     padding: EdgeInsets.symmetric(horizontal: 20.w),
@@ -861,7 +851,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                       ),
                     ),
                   ),
-                  SizedBox(height: 24.h),
+                  SizedBox(height: 16.h),
                 ],
                 if (showPremiumFeatures && _workPhotos.isNotEmpty) ...[
                   Text('Work Photos', style: AppTextStyles.bodyLarge),
@@ -886,7 +876,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                     ),
                   ),
                 ],
-                SizedBox(height: 40.h),
+                SizedBox(height: 24.h),
               ],
             ),
           ),
@@ -941,15 +931,12 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                 SizedBox(height: 12.h),
               ],
               if (_services.isNotEmpty) ...[
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 8.w,
-                  runSpacing: 8.h,
-                  children: _services.map((s) => Chip(
-                    label: Text(s['name'] ?? '', style: AppTextStyles.bodySmall),
-                    backgroundColor: AppColors.primary.withValues(alpha: 0.08),
-                    side: BorderSide.none,
-                  )).toList(),
+                Text(
+                  _services.map((s) => s['name'] ?? '').join(', '),
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.primary.withValues(alpha: 0.7),
+                  ),
                 ),
                 SizedBox(height: 12.h),
               ],

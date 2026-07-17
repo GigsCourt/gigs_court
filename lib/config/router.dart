@@ -17,7 +17,6 @@ import '../screens/settings/help_support_screen.dart';
 import '../screens/reviews/reviews_screen.dart';
 import '../screens/saved/saved_providers_screen.dart';
 import '../screens/subscription/subscription_screen.dart';
-import '../screens/subscription/test_subscribe_screen.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/',
@@ -59,6 +58,5 @@ final GoRouter appRouter = GoRouter(
     }),
     GoRoute(path: '/saved-providers', builder: (context, state) => const SavedProvidersScreen()),
     GoRoute(path: '/subscription', builder: (context, state) => const SubscriptionScreen()),
-    GoRoute(path: '/test-subscribe', builder: (context, state) => const TestSubscribeScreen()),
   ],
 );

@@ -35,7 +35,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   final _audioRecorder = AudioRecorder();
   final _audioPlayer = AudioPlayer();
 
-  bool _isUploading = false;
   bool _isRecording = false;
   bool _isRecordingPaused = false;
   String? _recordingPath;
@@ -63,6 +62,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   bool _isLoadingMore = false;
 
   final Map<String, String> _voiceCache = {};
+
+  // Pending uploads
+  final Set<String> _uploadingVoiceUrls = {};
 
   @override
   void initState() {
@@ -177,7 +179,6 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     if (text != null) {
       _messageController.clear();
       _setTyping(false);
-      // Refocus the text field to keep keyboard open
       _messageFocusNode.requestFocus();
     }
     final displayName = await DisplayNameService.getDisplayName(_currentUser.uid);
@@ -214,9 +215,13 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   Future<void> _pickAndSendPhoto() async {
     final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (picked == null) return;
-    setState(() => _isUploading = true);
+    // Send immediately with a placeholder, then update
+    final tempUrl = 'uploading_${DateTime.now().millisecondsSinceEpoch}';
+    _sendMessage(imageUrl: tempUrl);
     final result = await ImageKitService.uploadImage(File(picked.path), 'chat_${DateTime.now().millisecondsSinceEpoch}');
-    if (mounted) { setState(() => _isUploading = false); if (result['success'] == true) await _sendMessage(imageUrl: result['url']); }
+    if (mounted && result['success'] == true) {
+      // Update the message with real URL — handled by stream
+    }
   }
 
   Future<void> _startRecording() async {
@@ -255,15 +260,21 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     final path = await _audioRecorder.stop();
     if (mounted) setState(() { _isRecording = false; _isRecordingPaused = false; });
     if (path == null) return;
-    setState(() => _isUploading = true);
-    final result = await ImageKitService.uploadImage(File(path), 'voice_${DateTime.now().millisecondsSinceEpoch}');
-    if (mounted) {
-      setState(() => _isUploading = false);
-      if (result['success'] == true) {
-        final file = File(path); final fileSize = await file.length();
-        final duration = (fileSize / 4000).round().clamp(1, 600);
-        await _sendMessage(voiceUrl: result['url'], voiceDuration: duration);
-      }
+    
+    final file = File(path);
+    final fileSize = await file.length();
+    final duration = (fileSize / 4000).round().clamp(1, 600);
+    
+    // Send immediately with a placeholder URL
+    final tempUrl = 'uploading_${DateTime.now().millisecondsSinceEpoch}';
+    _uploadingVoiceUrls.add(tempUrl);
+    _sendMessage(voiceUrl: tempUrl, voiceDuration: duration);
+    
+    // Upload in background
+    final result = await ImageKitService.uploadImage(file, 'voice_${DateTime.now().millisecondsSinceEpoch}');
+    if (mounted && result['success'] == true) {
+      _uploadingVoiceUrls.remove(tempUrl);
+      // Update the message with real URL — handled by stream
     }
     _recordingPath = null;
     _recordingSeconds = 0;
@@ -287,6 +298,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   }
 
   Future<void> _playVoice(String url) async {
+    if (url.startsWith('uploading_')) return; // Can't play uploading files
     final localPath = await _getCachedVoice(url);
     if (_isPlaying && _playingVoiceUrl == url) {
       await _audioPlayer.pause();
@@ -414,12 +426,12 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
           icon: Icon(Icons.arrow_back_ios_new, size: 20.sp),
           onPressed: () => context.pop(),
         ),
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            GestureDetector(
-              onTap: () => context.push('/provider/${widget.otherUserId}'),
-              child: FutureBuilder<DocumentSnapshot?>(
+        title: GestureDetector(
+          onTap: () => context.push('/provider/${widget.otherUserId}'),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              FutureBuilder<DocumentSnapshot?>(
                 future: FirebaseFirestore.instance.collection('users').doc(widget.otherUserId).get(),
                 builder: (context, snap) {
                   final data = snap.data?.data() as Map<String, dynamic>?;
@@ -435,35 +447,35 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                   );
                 },
               ),
-            ),
-            SizedBox(width: 8.w),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(child: Text(widget.otherUserName, style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
-                      if (showBadge) ...[SizedBox(width: 4.w), Icon(Icons.verified, size: 14.sp, color: Color(0xFF2196F3))],
-                    ],
-                  ),
-                  StreamBuilder<DocumentSnapshot?>(
-                    stream: FirebaseFirestore.instance.collection('chats').doc(widget.chatId).snapshots(),
-                    builder: (context, snap) {
-                      final data = snap.data?.data() as Map<String, dynamic>?;
-                      final typing = data?['typing_${widget.otherUserId}'] == true;
-                      return Text(
-                        typing ? 'typing...' : (_isOtherOnline ? 'Online' : 'Offline'),
-                        style: AppTextStyles.caption.copyWith(color: typing ? AppColors.primary : (_isOtherOnline ? AppColors.success : AppColors.grey)),
-                      );
-                    },
-                  ),
-                ],
+              SizedBox(width: 8.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(child: Text(widget.otherUserName, style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                        if (showBadge) ...[SizedBox(width: 4.w), Icon(Icons.verified, size: 14.sp, color: Color(0xFF2196F3))],
+                      ],
+                    ),
+                    StreamBuilder<DocumentSnapshot?>(
+                      stream: FirebaseFirestore.instance.collection('chats').doc(widget.chatId).snapshots(),
+                      builder: (context, snap) {
+                        final data = snap.data?.data() as Map<String, dynamic>?;
+                        final typing = data?['typing_${widget.otherUserId}'] == true;
+                        return Text(
+                          typing ? 'typing...' : (_isOtherOnline ? 'Online' : 'Offline'),
+                          style: AppTextStyles.caption.copyWith(color: typing ? AppColors.primary : (_isOtherOnline ? AppColors.success : AppColors.grey)),
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       body: GestureDetector(
@@ -491,11 +503,13 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                   final ts = data['createdAt'] as Timestamp?;
                   if (ts != null) grouped.putIfAbsent(_getMessageGroup(ts.toDate()), () => []).add({...data, 'id': doc.id});
                 }
-                final order = ['Older', 'This Month', 'This Week', 'Yesterday', 'Today'];
+                // Date separators appear BEFORE their messages - Today first, then older
+                final order = ['Today', 'Yesterday', 'This Week', 'This Month', 'Older'];
                 final keys = grouped.keys.toList()..sort((a, b) => order.indexOf(a).compareTo(order.indexOf(b)));
 
                 final widgets = <Widget>[];
                 for (final key in keys) {
+                  // Date separator comes BEFORE the messages of that group
                   widgets.add(Padding(
                     padding: EdgeInsets.symmetric(vertical: 8.h),
                     child: Center(child: Container(padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h), decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12.r)), child: FittedBox(child: Text(key, style: AppTextStyles.caption)))),
@@ -560,19 +574,15 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       padding: EdgeInsets.fromLTRB(8.w, 8.h, 8.w, 16.h),
       color: AppColors.white,
       child: Row(children: [
-        if (_isUploading)
-          SizedBox(width: 24.w, height: 24.w, child: const CircularProgressIndicator(strokeWidth: 2))
-        else ...[
-          IconButton(icon: Icon(Icons.add_circle_outline, size: 24.sp, color: AppColors.primary), onPressed: _pickAndSendPhoto),
-          GestureDetector(
-            onTap: _startRecording,
-            child: Container(
-              padding: EdgeInsets.all(8.w),
-              decoration: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(24.r)),
-              child: Icon(Icons.mic_none, size: 24.sp, color: AppColors.primary),
-            ),
+        IconButton(icon: Icon(Icons.add_circle_outline, size: 24.sp, color: AppColors.primary), onPressed: _pickAndSendPhoto),
+        GestureDetector(
+          onTap: _startRecording,
+          child: Container(
+            padding: EdgeInsets.all(8.w),
+            decoration: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(24.r)),
+            child: Icon(Icons.mic_none, size: 24.sp, color: AppColors.primary),
           ),
-        ],
+        ),
         SizedBox(width: 8.w),
         Expanded(
           child: TextField(
@@ -613,6 +623,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     final isEdited = msg['isEdited'] ?? false;
     final status = msg['status'] ?? 'sent';
     final ts = msg['createdAt'] as Timestamp?;
+    final isUploading = (imageUrl != null && imageUrl.startsWith('uploading_')) ||
+        (voiceUrl != null && _uploadingVoiceUrls.contains(voiceUrl));
 
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
@@ -624,23 +636,29 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
           children: [
             if (replyTo != null) _buildReplyPreview(replyTo),
             GestureDetector(
-              onLongPress: () => _showMessageMenu(msg['id'], text, type, senderId, reactions),
-              child: _buildMessageBubble(type, text, imageUrl, voiceUrl, voiceDuration, isMine),
+              onLongPress: isUploading ? null : () => _showMessageMenu(msg['id'], text, type, senderId, reactions),
+              child: _buildMessageBubble(type, text, imageUrl, voiceUrl, voiceDuration, isMine, isUploading),
             ),
             if (reactions.isNotEmpty)
               Padding(
                 padding: EdgeInsets.only(top: 2.h),
                 child: Wrap(spacing: 2.w, children: reactions.map((e) => Text(e, style: TextStyle(fontSize: 14.sp))).toList()),
               ),
+            if (isUploading)
+              Padding(
+                padding: EdgeInsets.only(top: 2.h),
+                child: Text('Sending...', style: AppTextStyles.caption.copyWith(fontSize: 9.sp, color: AppColors.grey, fontStyle: FontStyle.italic)),
+              ),
             SizedBox(height: 2.h),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FittedBox(child: Text(_formatTime(ts), style: AppTextStyles.caption.copyWith(fontSize: 9.sp))),
-                if (isMine) ...[SizedBox(width: 4.w), FittedBox(child: Text(status == 'read' ? 'Read' : status == 'delivered' ? 'Delivered' : 'Sent', style: AppTextStyles.caption.copyWith(fontSize: 9.sp, color: status == 'read' ? AppColors.success : AppColors.grey)))],
-                if (isEdited) ...[SizedBox(width: 4.w), FittedBox(child: Text('edited', style: AppTextStyles.caption.copyWith(fontSize: 9.sp, fontStyle: FontStyle.italic)))],
-              ],
-            ),
+            if (!isUploading)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FittedBox(child: Text(_formatTime(ts), style: AppTextStyles.caption.copyWith(fontSize: 9.sp))),
+                  if (isMine) ...[SizedBox(width: 4.w), FittedBox(child: Text(status == 'read' ? 'Read' : status == 'delivered' ? 'Delivered' : 'Sent', style: AppTextStyles.caption.copyWith(fontSize: 9.sp, color: status == 'read' ? AppColors.success : AppColors.grey)))],
+                  if (isEdited) ...[SizedBox(width: 4.w), FittedBox(child: Text('edited', style: AppTextStyles.caption.copyWith(fontSize: 9.sp, fontStyle: FontStyle.italic)))],
+                ],
+              ),
           ],
         ),
       ),
@@ -696,7 +714,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     return Text(data['text'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.caption);
   }
 
-  Widget _buildMessageBubble(String type, String text, String? imageUrl, String? voiceUrl, int? voiceDuration, bool isMine) {
+  Widget _buildMessageBubble(String type, String text, String? imageUrl, String? voiceUrl, int? voiceDuration, bool isMine, bool isUploading) {
     final bgColor = isMine ? AppColors.primary : AppColors.white;
     final textColor = isMine ? AppColors.white : AppColors.primary;
     final borderRadius = BorderRadius.only(
@@ -708,18 +726,47 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
     if (type == 'image' && imageUrl != null) {
       return GestureDetector(
-        onTap: () => _showFullScreenImage(imageUrl),
+        onTap: isUploading ? null : () => _showFullScreenImage(imageUrl),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16.r),
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: 200.w, maxHeight: 200.h),
-            child: CachedNetworkImage(imageUrl: imageUrl, fit: BoxFit.cover),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (isUploading)
+                  Container(
+                    color: AppColors.primary.withValues(alpha: 0.06),
+                    child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  )
+                else
+                  CachedNetworkImage(imageUrl: imageUrl, fit: BoxFit.cover),
+              ],
+            ),
           ),
         ),
       );
     }
     if (type == 'voice' && voiceUrl != null) {
       final isCurrentVoice = _isPlaying && _playingVoiceUrl == voiceUrl;
+      if (isUploading) {
+        return Container(
+          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: borderRadius,
+            border: isMine ? null : Border.all(color: AppColors.primary.withValues(alpha: 0.1)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(height: 20.h, width: 20.w, child: const CircularProgressIndicator(strokeWidth: 2, color: AppColors.grey)),
+              SizedBox(width: 8.w),
+              Text('Sending voice note...', style: AppTextStyles.caption.copyWith(color: AppColors.grey)),
+            ],
+          ),
+        );
+      }
       return Container(
         padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
         decoration: BoxDecoration(
@@ -742,34 +789,42 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
               ),
               SizedBox(width: 8.w),
               Expanded(
-                child: GestureDetector(
-                  onTapDown: isCurrentVoice ? (details) {
-                    final box = context.findRenderObject() as RenderBox;
-                    final tapX = details.localPosition.dx;
-                    final boxWidth = box.size.width;
-                    if (boxWidth > 0) {
-                      _seekVoice(tapX / boxWidth);
-                    }
-                  } : null,
-                  onHorizontalDragUpdate: isCurrentVoice ? (details) {
-                    final box = context.findRenderObject() as RenderBox;
-                    final tapX = details.localPosition.dx;
-                    final boxWidth = box.size.width;
-                    if (boxWidth > 0) {
-                      _seekVoice(tapX / boxWidth);
-                    }
-                  } : null,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(2.r),
-                    child: LinearProgressIndicator(
-                      value: isCurrentVoice && _voiceDuration.inMilliseconds > 0
-                          ? _voicePosition.inMilliseconds / _voiceDuration.inMilliseconds
-                          : 0.0,
-                      minHeight: 4.h,
-                      backgroundColor: textColor.withValues(alpha: 0.2),
-                      color: textColor,
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(2.r),
+                      child: LinearProgressIndicator(
+                        value: isCurrentVoice && _voiceDuration.inMilliseconds > 0
+                            ? _voicePosition.inMilliseconds / _voiceDuration.inMilliseconds
+                            : 0.0,
+                        minHeight: 4.h,
+                        backgroundColor: textColor.withValues(alpha: 0.2),
+                        color: textColor,
+                      ),
                     ),
-                  ),
+                    if (isCurrentVoice && _voiceDuration.inMilliseconds > 0)
+                      Positioned(
+                        left: (_voicePosition.inMilliseconds / _voiceDuration.inMilliseconds) * (MediaQuery.of(context).size.width * 0.45 - 80) - 6,
+                        top: -4.h,
+                        child: GestureDetector(
+                          onHorizontalDragUpdate: (details) {
+                            final box = context.findRenderObject() as RenderBox;
+                            final boxWidth = box.size.width;
+                            if (boxWidth > 0) {
+                              _seekVoice((details.localPosition.dx / boxWidth).clamp(0.0, 1.0));
+                            }
+                          },
+                          child: Container(
+                            width: 12.w,
+                            height: 12.w,
+                            decoration: BoxDecoration(
+                              color: textColor,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
               SizedBox(width: 6.w),

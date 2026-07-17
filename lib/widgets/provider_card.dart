@@ -36,7 +36,7 @@ class ProviderCardData {
     this.isOwnProfile = false,
   });
 
-  bool get showOnlineStatus => isEarlyAccess || isSubscribed;
+  bool get showOnlineStatus => true;
   bool get showVerifiedBadge => isEarlyAccess || isSubscribed;
   bool get isAcceptingClients => isEarlyAccess || isSubscribed || isFree;
 
@@ -116,7 +116,7 @@ class ProviderCard extends StatelessWidget {
 
   Widget _buildPhotoSection({double? height}) {
     final hasWorkPhoto = provider.latestWorkPhoto != null && provider.latestWorkPhoto!.isNotEmpty;
-    final showWorkPhotos = provider.isEarlyAccess || provider.isSubscribed;
+    final showWorkPhotos = provider.isEarlyAccess || provider.isSubscribed || provider.isFree;
     return ClipRRect(
       borderRadius: isHorizontal
           ? BorderRadius.horizontal(left: Radius.circular(16.r))
@@ -189,9 +189,9 @@ class ProviderCard extends StatelessWidget {
                   SizedBox(height: 4.h),
                   if (provider.showOnlineStatus)
                     Row(children: [
-                      Container(width: 7.w, height: 7.h, decoration: BoxDecoration(color: provider.isOnline ? AppColors.success : AppColors.grey, shape: BoxShape.circle)),
+                      Container(width: 7.w, height: 7.h, decoration: BoxDecoration(color: (provider.isOnline || provider.isOwnProfile) ? AppColors.success : AppColors.grey, shape: BoxShape.circle)),
                       SizedBox(width: 4.w),
-                      Text(provider.isOnline ? 'Online now' : 'Last seen ${provider.lastSeen ?? "recently"}', style: AppTextStyles.caption.copyWith(color: provider.isOnline ? AppColors.success : AppColors.grey)),
+                      Text(provider.isOwnProfile ? 'Online now' : (provider.isOnline ? 'Online now' : 'Last seen ${provider.lastSeen ?? "recently"}'), style: AppTextStyles.caption.copyWith(color: (provider.isOnline || provider.isOwnProfile) ? AppColors.success : AppColors.grey)),
                     ]),
                   SizedBox(height: 4.h),
                   Text(provider.services.take(2).join(', '), style: AppTextStyles.caption, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -211,8 +211,8 @@ class ProviderCard extends StatelessWidget {
   Widget _buildPortraitCard(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmall = screenWidth < 380;
-    final nameSize = isSmall ? 12.0 : 13.0;
-    final detailSize = isSmall ? 10.0 : 11.0;
+    final nameSize = isSmall ? 11.0 : 12.0;
+    final detailSize = isSmall ? 9.0 : 10.0;
 
     return Container(
       decoration: BoxDecoration(
@@ -224,32 +224,32 @@ class ProviderCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildPhotoSection(height: 120.h),
+          _buildPhotoSection(height: 110.h),
           Padding(
-            padding: EdgeInsets.all(10.w),
+            padding: EdgeInsets.all(8.w),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(children: [
                   Flexible(child: Text(provider.name, style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600, fontSize: nameSize.sp), overflow: TextOverflow.ellipsis)),
-                  if (provider.showVerifiedBadge) ...[SizedBox(width: 4.w), Icon(Icons.verified, size: 14.sp, color: _verifiedBlue)],
+                  if (provider.showVerifiedBadge) ...[SizedBox(width: 4.w), Icon(Icons.verified, size: 13.sp, color: _verifiedBlue)],
                   if (provider.isOwnProfile) ...[SizedBox(width: 2.w), Text('(You)', style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp))],
                 ]),
-                SizedBox(height: 3.h),
+                SizedBox(height: 2.h),
                 _buildStatusChip(),
-                SizedBox(height: 3.h),
+                SizedBox(height: 2.h),
                 if (provider.showOnlineStatus)
                   Row(children: [
-                    Container(width: 6.w, height: 6.h, decoration: BoxDecoration(color: provider.isOnline ? AppColors.success : AppColors.grey, shape: BoxShape.circle)),
+                    Container(width: 5.w, height: 5.h, decoration: BoxDecoration(color: (provider.isOnline || provider.isOwnProfile) ? AppColors.success : AppColors.grey, shape: BoxShape.circle)),
                     SizedBox(width: 3.w),
-                    Text(provider.isOnline ? 'Online' : provider.lastSeen ?? '', style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp, color: provider.isOnline ? AppColors.success : AppColors.grey)),
+                    Text(provider.isOwnProfile ? 'Online now' : (provider.isOnline ? 'Online' : provider.lastSeen ?? ''), style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp, color: (provider.isOnline || provider.isOwnProfile) ? AppColors.success : AppColors.grey)),
                   ]),
-                SizedBox(height: 3.h),
+                SizedBox(height: 2.h),
                 Text(provider.services.take(2).join(', '), style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp), maxLines: 1, overflow: TextOverflow.ellipsis),
-                SizedBox(height: 3.h),
-                Row(children: [Icon(Icons.star, size: 12.sp, color: Colors.amber), SizedBox(width: 2.w), Text('${provider.rating.toStringAsFixed(1)} (${provider.reviewCount})', style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp))]),
-                SizedBox(height: 3.h),
-                Row(children: [Icon(Icons.location_on_outlined, size: 12.sp, color: AppColors.primary.withValues(alpha: 0.5)), SizedBox(width: 2.w), Text('${provider.distanceKm.toStringAsFixed(1)} km', style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp))]),
+                SizedBox(height: 2.h),
+                Row(children: [Icon(Icons.star, size: 11.sp, color: Colors.amber), SizedBox(width: 2.w), Text('${provider.rating.toStringAsFixed(1)} (${provider.reviewCount})', style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp))]),
+                SizedBox(height: 2.h),
+                Row(children: [Icon(Icons.location_on_outlined, size: 11.sp, color: AppColors.primary.withValues(alpha: 0.5)), SizedBox(width: 2.w), Text('${provider.distanceKm.toStringAsFixed(1)} km', style: AppTextStyles.caption.copyWith(fontSize: detailSize.sp))]),
               ],
             ),
           ),

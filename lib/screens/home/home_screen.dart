@@ -326,7 +326,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         _featuredProviders =
-            providers.where((p) => p.isSubscribed && !p.isOwnProfile).toList();
+            providers.where((p) => p.isSubscribed).toList();
         _allProviders = providers;
         _isLoading = false;
       });
@@ -600,7 +600,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           gridDelegate:
                               SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: crossAxisCount,
-                            childAspectRatio: 0.72,
+                            childAspectRatio: 0.65,
                             crossAxisSpacing: 12.w,
                             mainAxisSpacing: 12.h,
                           ),
@@ -797,7 +797,7 @@ class _HomeScreenState extends State<HomeScreen> {
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: crossAxisCount,
-              childAspectRatio: 0.72,
+              childAspectRatio: 0.65,
               crossAxisSpacing: 12.w,
               mainAxisSpacing: 12.h,
             ),
