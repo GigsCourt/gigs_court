@@ -91,19 +91,18 @@ class ProviderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () {
+            onTap: () {
         onTap?.call();
-        if (!provider.isEarlyAccess && !provider.isSubscribed && !provider.isOwnProfile) {
+        // Only send notification for fully booked users (no leads, not subscribed, early access OFF)
+        if (!provider.isEarlyAccess && !provider.isSubscribed && !provider.isFree) {
           FirebaseFirestore.instance
               .collection('users')
               .doc(provider.id)
               .collection('notifications')
               .add({
             'type': 'missed_connection',
-            'title': 'Profile Viewed',
-            'body': provider.isAcceptingClients
-                ? 'A potential client viewed your profile but your chat, directions, and work photos are hidden until you subscribe.'
-                : 'A client tried to book you but your profile is listed as Fully Booked. Subscribe to start accepting clients again.',
+            'title': 'Missed Connection',
+            'body': 'A client tried to book you but your profile is listed as Fully Booked. Subscribe to start accepting clients again.',
             'read': false,
             'data': {'providerId': provider.id},
             'createdAt': FieldValue.serverTimestamp(),

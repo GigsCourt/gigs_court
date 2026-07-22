@@ -34,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // Location
   double? _userLat;
   double? _userLng;
+  bool _locationInitialized = false;
   StreamSubscription? _locationSubscription;
   StreamSubscription<QuerySnapshot>? _onlineStatusListener;
 
@@ -119,6 +120,11 @@ class _HomeScreenState extends State<HomeScreen> {
           distanceFilter: 100,
         ),
       ).listen((position) {
+        // Skip the first automatic position update
+        if (!_locationInitialized) {
+          _locationInitialized = true;
+          return;
+        }
         _userLat = position.latitude;
         _userLng = position.longitude;
         _loadProviders();
@@ -266,7 +272,6 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
 
-      // Filter by selected service if any
       if (_selectedServiceId != null) {
         providersRaw.removeWhere(
             (p) => !(p['serviceIds'] as List<String>).contains(_selectedServiceId));
@@ -476,6 +481,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 controller: _scrollController,
                 padding: EdgeInsets.zero,
                 children: [
+                  // Search hint text (only when no search active and no service selected)
+                  if (_selectedService == null && _searchResults.isEmpty)
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(20.w, 4.h, 20.w, 0),
+                      child: Text(
+                        'Search for a service e.g. Barber, Plumber, Web Developer',
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.primary.withValues(alpha: 0.3),
+                          fontSize: 10.sp,
+                        ),
+                      ),
+                    ),
+
                   // Search results dropdown
                   if (_searchResults.isNotEmpty)
                     Container(
@@ -520,7 +538,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (_isLoading && _allProviders.isEmpty)
                     _buildSkeletonGrid(crossAxisCount)
                   else ...[
-                    // Featured providers (only when no search active)
                     if (_featuredProviders.isNotEmpty &&
                         _selectedService == null) ...[
                       Padding(
@@ -554,7 +571,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
 
-                    // All providers
                     Padding(
                       padding: EdgeInsets.fromLTRB(16.w,
                           (_featuredProviders.isEmpty || _selectedService != null) ? 12.h : 16.h,
@@ -716,7 +732,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
           ),
-          // Verified toggle at end of trending row
           if (_trendingServices.isNotEmpty)
             Padding(
               padding: EdgeInsets.only(right: 12.w),

@@ -239,23 +239,21 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
         .doc('global')
         .set({'totalChats': FieldValue.increment(1)}, SetOptions(merge: true));
 
+    // Track lead only for freemium users (not subscribed, early access OFF, has leads left)
     if (!isEarlyAccess) {
-      final existingLeads = await FirebaseFirestore.instance
-          .collection('chats')
-          .where('participants', arrayContains: widget.providerId)
-          .get();
-      final uniqueClients = <String>{};
-      for (final doc in existingLeads.docs) {
-        final participants =
-            List<String>.from(doc.data()['participants'] ?? []);
-        uniqueClients
-            .addAll(participants.where((id) => id != widget.providerId));
+      final providerData = _userData;
+      final providerSubscribed = providerData?['isSubscribed'] == true;
+      final currentLeadCount = providerData?['leadCount'] ?? 0;
+      final isFreemium = !providerSubscribed && currentLeadCount < 10;
+      
+      if (isFreemium) {
+        final newLeadCount = currentLeadCount + 1;
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.providerId)
+            .update({'leadCount': newLeadCount});
+        _sendLeadNotification(widget.providerId, newLeadCount);
       }
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.providerId)
-          .update({'leadCount': uniqueClients.length});
-      _sendLeadNotification(widget.providerId, uniqueClients.length);
     }
 
     if (!mounted) return;
@@ -460,35 +458,18 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
     }
   }
 
-  Future<void> _sendReviewNotification(String providerId, int reviewCount,
+   Future<void> _sendReviewNotification(String providerId, int reviewCount,
       String clientName, int rating, String comment) async {
-    final remaining = 5 - reviewCount;
     final stars = '⭐' * rating;
     final reviewText = comment.isNotEmpty ? ": '$comment'" : '';
-
-    bool isSubscribed = false;
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(providerId)
-          .get();
-      if (doc.exists) {
-        isSubscribed = doc.data()?['isSubscribed'] == true;
-      }
-    } catch (_) {}
-
-    final body = isSubscribed
-        ? '$clientName rated you $stars$reviewText'
-        : '$clientName rated you $stars$reviewText. You have $remaining free reviews remaining.';
+    final body = '$clientName rated you $stars$reviewText';
 
     await FirebaseFirestore.instance
         .collection('users')
         .doc(providerId)
         .collection('notifications')
         .add({
-      'type': isSubscribed
-          ? 'review'
-          : (reviewCount >= 5 ? 'review_limit' : 'review_milestone'),
+      'type': 'review',
       'title': 'New Review! ⭐',
       'body': body,
       'read': false,
