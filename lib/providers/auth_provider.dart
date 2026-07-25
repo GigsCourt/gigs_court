@@ -22,6 +22,16 @@ class AuthProvider extends ChangeNotifier {
   bool get isEarlyAccess => _isEarlyAccess;
 
   AuthProvider() {
+    // === FIX: Check if user is already signed in ===
+    final currentUser = _auth.currentUser;
+    if (currentUser != null) {
+      // Schedule this to run after the constructor completes
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _onAuthStateChanged(currentUser);
+      });
+    }
+    // === END FIX ===
+    
     _auth.authStateChanges().listen(_onAuthStateChanged);
     _listenToEarlyAccess();
   }
